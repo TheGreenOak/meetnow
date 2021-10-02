@@ -1,3 +1,3 @@
-# MeetNow - An open source, peer to peer alternative to Zoom
+# MeetNow - Proof of Concept Branch
 
-Welcome to the MeetNow project. Currently, we are in the research phase of this project. You may find any and all findings under the `poc` branch.
+Welcome to the POC branch. Here we will present all of our research and findings regarding Peer to Peer communication, browser UI, server networking and much more.
