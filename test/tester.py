@@ -45,17 +45,18 @@ class Connection:
         self.sock.close()
 
 
-def sendContinously(conn):
+def send_continously(conn):
     while True:
         conn.send(input(""))
+        
 
-
-def recvContinously(conn):
+def recv_continously(conn):
     try:
         while conn.keep_running:
             print("[SERVER]", conn.recv(1024))
     except ConnectionResetError:
         print("Server aborted connection.")
+
 
 
 def main():
@@ -76,25 +77,25 @@ def main():
     print("1 - TCP")
     print("2 - UDP")
     print("Please enter the type of connection you want to test: ", end="")
-    connType = int(input(""))
+    conn_type = int(input(""))
     print()
 
-    conn = Connection(ip, sport, dport, connType)
+    conn = Connection(ip, sport, dport, conn_type)
 
     try:
         conn.connect()
         print("Connection established.")
 
         # We make a new thread for receiving data from the server without interrupting the main thread
-        recvThread = threading.Thread(target=recvContinously, args=(conn,))
-        recvThread.start()
+        recv_thread = threading.Thread(target=recv_continously, args=(conn,))
+        recv_thread.start()
 
         try:
-            sendContinously(conn)
+            send_continously(conn)
         except KeyboardInterrupt:
             conn.keep_running = False
-            recvThread.join()
-        
+            recv_thread.join()
+              
         conn.close()
         print("Connection closed.")
     except TimeoutError:
