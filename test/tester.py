@@ -20,6 +20,7 @@ class Connection:
         self.type = type
         self.sock = None
         self.keep_running = True
+        self.is_blocked = False
 
     def connect(self):
         """
@@ -43,6 +44,12 @@ class Connection:
     
     def close(self):
         self.sock.close()
+    
+    def toggle_blocking_mode(self):
+        if self.is_blocked:
+            self.sock.setblocking(1) 
+        else:
+            self.sock.setblocking(0)
 
 
 def send_continously(conn):
@@ -53,7 +60,10 @@ def send_continously(conn):
 def recv_continously(conn):
     try:
         while conn.keep_running:
-            print("[SERVER]", conn.recv(1024))
+            try:
+                print("[SERVER]", conn.recv(1024))
+            except BlockingIOError:
+                pass
     except ConnectionResetError:
         print("Server aborted connection.")
 
@@ -85,6 +95,9 @@ def main():
     try:
         conn.connect()
         print("Connection established.")
+
+        # Making this socket non-blocking so that we can abort the tester
+        conn.toggle_blocking_mode() 
 
         # We make a new thread for receiving data from the server without interrupting the main thread
         recv_thread = threading.Thread(target=recv_continously, args=(conn,))
