@@ -13,11 +13,11 @@ class Connection:
     Supports source ports, TCP and UDP.
     """
 
-    def __init__(self, ip, sport, dport, type):
+    def __init__(self, ip, sport, dport, conn_type):
         self.ip = ip
         self.sport = sport
         self.dport = dport
-        self.type = type
+        self.conn_type = conn_type
         self.sock = None
         self.keep_running = True
         self.is_blocked = False
@@ -28,9 +28,9 @@ class Connection:
 
         Error handling is not implemented. You're on your own.
         """
-        if self.type == TCP:
+        if self.conn_type == TCP:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # Set up TCP socket
-        elif self.type == UDP:
+        elif self.conn_type == UDP:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # Set up UDP socket
 
         self.sock.bind(("0.0.0.0", self.sport)) # Set up source port
