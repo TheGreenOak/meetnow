@@ -37,15 +37,31 @@ class Connection:
         self.sock.connect((self.ip, self.dport)) # Connect to the server
 
     def send(self, data):
+        """
+        Sends data to the server.
+        """
+
         self.sock.send(data.encode())
 
     def recv(self, size):
+        """
+        Receives data from the server.
+        """
+
         return self.sock.recv(size).decode()
     
     def close(self):
+        """
+        Closes the connection and terminates the socket.
+        """
+
         self.sock.close()
     
     def toggle_blocking_mode(self):
+        """
+        Toggles the blocking mode of the socket.
+        """
+
         if self.is_blocked:
             self.sock.setblocking(1) 
         else:
