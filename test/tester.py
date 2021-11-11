@@ -62,10 +62,7 @@ class Connection:
         Toggles the blocking mode of the socket.
         """
 
-        if self.is_blocked:
-            self.sock.setblocking(1) 
-        else:
-            self.sock.setblocking(0)
+        self.is_blocked = not self.is_blocked
 
 
 def send_continously(conn):
