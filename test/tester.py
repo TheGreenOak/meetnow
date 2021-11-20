@@ -75,7 +75,11 @@ def recv_continously(conn):
     try:
         while conn.keep_running:
             try:
-                print("[SERVER]", conn.recv(1024))
+                data = conn.recv(1024)
+                if not data: # If the server has closed the connection, we'll get empty data
+                    break
+
+                print("[SERVER]", data)
             except BlockingIOError:
                 pass
     except ConnectionResetError:
