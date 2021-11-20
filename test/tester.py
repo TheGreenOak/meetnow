@@ -63,6 +63,7 @@ class Connection:
         """
 
         self.is_blocked = not self.is_blocked
+        self.sock.setblocking(self.is_blocked)
 
 
 def send_continously(conn):
