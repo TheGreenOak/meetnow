@@ -67,8 +67,11 @@ class Connection:
 
 
 def send_continously(conn):
-    while True:
-        conn.send(input(""))
+    try:
+        while conn.keep_running:
+            conn.send(input(""))
+    except:
+        print("Server aborted connection.")
         
 
 def recv_continously(conn):
@@ -82,7 +85,7 @@ def recv_continously(conn):
                 print("[SERVER]", data)
             except BlockingIOError:
                 pass
-    except ConnectionResetError:
+    except:
         print("Server aborted connection.")
 
 
@@ -126,13 +129,13 @@ def main():
         except KeyboardInterrupt:
             conn.keep_running = False
             recv_thread.join()
-              
-        conn.close()
-        print("Connection closed.")
     except TimeoutError:
         print("Couldn't connect to server. Aborting!")
-    except ConnectionRefusedError:
+    except:
         print("Connection refused. Aborting!")
+    finally:
+        conn.close()
+        print("Connection closed.")
 
 
 if __name__ == "__main__":
