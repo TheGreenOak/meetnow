@@ -1,79 +1,118 @@
 import socket
+from threading import Thread
 
 
 TCP = 1
 UDP = 2
 
 
-class Server:
-    """
-    A basic server interface that has basic I/O support.
-    """
-
-    def __init__(self, port, conn_type, capacity):
+class TCPServer:
+    def __init__(self, port):
         self.port = port
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.is_blocked = True
+        self.keep_running = True
 
-        if conn_type != TCP and conn_type != UDP:
-            raise ValueError("Invalid connection type")
-        
-        self.conn_type = conn_type
-        self.capacity = capacity
-        self.sock = None
-        self.is_blocked = False
-    
-    def start(self):
-        """
-        Starts the server, and listens on the specified port.
-        """
 
-        # Figure out which socket type to use
-        if self.conn_type == TCP:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        elif self.conn_type == UDP:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        
-        self.sock.bind(('', self.port))
-        self.sock.listen(self.capacity) # TODO: Fix UDP bug
-        print("[!] Server started on port:", self.port)
-    
     def toggle_blocking_mode(self):
         """
         Toggles the blocking mode of the server socket.
         """
-
         self.is_blocked = not self.is_blocked
-        print("[!] Blocking mode has been toggled.")
-    
+        self.socket.setblocking(self.is_blocked)
+
+    def start(self):
+        """
+        Starts the server.
+        """
+        self.socket.bind(("", self.port))
+        self.socket.listen()
+
     def accept(self):
         """
-        Accepts a connection from the client.
+        Accepts a new client.
         """
+        return self.socket.accept()
 
-        return self.sock.accept()
-    
-    def send(self, conn, data):
+    def recv(self, client):
         """
-        Sends data to the client.
+        Receives data from a client.
         """
+        return client.recv(1024)
 
-        conn.send(data)
-    
-    def recv(self, conn):
+    def send(self, client, data):
         """
-        Receives data from the client.
+        Sends data to a client.
         """
+        client.send(data)
 
-        return conn.recv(1024)
-    
     def stop(self):
         """
         Stops the server.
         """
+        self.socket.close()
 
-        self.sock.close()
-        self.sock.shutdown(socket.SHUT_RDWR)
-        print("[!] Server stopped.")
-        print("[!] Server has stopped.")
+
+class UDPServer:
+    def __init__(self, port):
+        self.port = port
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.is_blocked = True
+
+
+    def toggle_blocking_mode(self):
+        """
+        Toggles the blocking mode of the server socket.
+        """
+        self.is_blocked = not self.is_blocked
+        self.socket.setblocking(self.is_blocked)
+
+    def start(self):
+        """
+        Starts the server.
+        """
+        self.socket.bind(("", self.port))
+
+    def recv(self):
+        """
+        Receives data from a client.
+        """
+        return self.socket.recvfrom(1024)
+
+    def send(self, address, data):
+        """
+        Sends data to a client.
+        """
+        self.socket.sendto(data, address)
+
+    def stop(self):
+        """
+        Stops the server.
+        """
+        self.socket.close()
+
+
+def handle_client(server, client, address):
+    """
+    Handles a TCP client.
+    """
+
+    try:
+        while server.keep_running:
+            try:
+                data = server.recv(client)
+                if not data:
+                    break
+
+                print("[{}:{}] {}".format(address[0], address[1], data.decode()))
+                server.send(client, data)
+            except BlockingIOError:
+                pass
+    except:
+        pass
+    finally:
+        print("[DISCONNECTED] {}:{}".format(address[0], address[1]))
+        client.close()
 
 
 def main():
@@ -82,28 +121,55 @@ def main():
     print("Please enter the port you'd like to listen to: ", end="")
     port = int(input())
 
+    print("1 - TCP")
+    print("2 - UDP")
     print("Please enter the connection type: ", end="")
     conn_type = int(input())
 
-    print("Please enter the capacity of the server: ", end="")
-    capacity = int(input())
-
-    server = Server(port, conn_type, capacity)
+    if conn_type == TCP:
+        server = TCPServer(port)
+    elif conn_type == UDP:
+        server = UDPServer(port)
+    else:
+        raise ValueError("Invalid connection type.")
+    
     server.start()
+    server.toggle_blocking_mode() # We want to be able to stop the server at any time.
+    print("Server started. Listening on port", port)
+
+    # Store the client threads in a list so we can later join them.
+    TCP_threads = []
 
     try:
-        client = server.accept()[0]
-        host, port = client.getpeername()
-        print("Client {}:{} has connected.".format(host, port))
+        if conn_type == TCP:
+            while True:
+                try:
+                    client, address = server.accept()
+                    print("[CONNECTED] {}:{}".format(address[0], address[1]))
 
-        while True:
-            data = server.recv(client).decode()
-            print("[{}:{} -> Server] {}".format(host, port, data))
-            print("[Server -> {}:{}] {}".format(host, port, data))
-            server.send(client, data.encode())
+                    # Make a new thread to handle the client, and store it in the list.
+                    client_thread = Thread(target=handle_client, args=(server, client, address))
+                    client_thread.start()
+                    TCP_threads.append(client_thread)
+                except BlockingIOError:
+                    pass
+        elif conn_type == UDP:
+            while True:
+                try:
+                    # In UDP, there are no sockets. Therefore, we just need to receive data.
+                    data, address = server.recv()
+                    print("[{}:{}] {}".format(address[0], address[1], data.decode()))
+                    server.send(address, data)
+                except BlockingIOError:
+                    pass
     except KeyboardInterrupt:
+        server.keep_running = False
+
+        for thread in TCP_threads:
+            thread.join()
+
+        print("\nStopping server...")
         server.stop()
-        print("[!] Server has stopped.")
 
 
 if __name__ == "__main__":
