@@ -1,4 +1,5 @@
 import socket
+import json
 from threading import Thread
 
 
@@ -34,11 +35,12 @@ class TCPServer:
         """
         return self.socket.accept()
 
-    def recv(self, client):
+    def recv(self, client, size):
         """
         Receives data from a client.
         """
-        return client.recv(1024)
+
+        return client.recv(size)
 
     def send(self, client, data):
         """
@@ -73,11 +75,11 @@ class UDPServer:
         """
         self.socket.bind(("", self.port))
 
-    def recv(self):
+    def recv(self, size):
         """
         Receives data from a client.
         """
-        return self.socket.recvfrom(1024)
+        return self.socket.recvfrom(size)
 
     def send(self, address, data):
         """
@@ -92,7 +94,23 @@ class UDPServer:
         self.socket.close()
 
 
-def handle_client(server, client, address):
+def serialize(data):
+    """
+    Serializes a data object into a JSON string.
+    Error handling is not implemented. You're on your own.
+    """
+    return json.dumps(data)
+
+
+def deserialize(data):
+    """
+    Deserializes a JSON string into a data object.
+    Error handling is not implemented. You're on your own.
+    """
+    return json.loads(data)
+
+
+def handle_tcp_client(server, client, address):
     """
     Handles a TCP client.
     """
@@ -100,7 +118,7 @@ def handle_client(server, client, address):
     try:
         while server.keep_running:
             try:
-                data = server.recv(client)
+                data = server.recv(client, 1024)
                 if not data:
                     break
 
@@ -148,7 +166,7 @@ def main():
                     print("[CONNECTED] {}:{}".format(address[0], address[1]))
 
                     # Make a new thread to handle the client, and store it in the list.
-                    client_thread = Thread(target=handle_client, args=(server, client, address))
+                    client_thread = Thread(target=handle_tcp_client, args=(server, client, address))
                     client_thread.start()
                     TCP_threads.append(client_thread)
                 except BlockingIOError:
@@ -157,7 +175,7 @@ def main():
             while True:
                 try:
                     # In UDP, there are no sockets. Therefore, we just need to receive data.
-                    data, address = server.recv()
+                    data, address = server.recv(1024)
                     print("[{}:{}] {}".format(address[0], address[1], data.decode()))
                     server.send(address, data)
                 except BlockingIOError:
