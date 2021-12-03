@@ -204,7 +204,9 @@ class Signaling(TCPServer):
             raise AloneInMeeting
 
         # Switch the host
-        # TODO: ^
+        new_host = 1 if meeting["participants"][0] == user else 0
+        user["host"] = False
+        meeting["participants"][new_host]["host"] = True
 
 
     def handle_client(self, client):
@@ -256,7 +258,7 @@ if __name__ == "__main__":
 Client
 - {"request": "start"} Start new meeting ✅
 - {"request": "stop"} Stop meeting (only if you're host)
-- {"request": "switch"} Transfer host
+- {"request": "switch"} Transfer host ✅
 - {"request": "join", "id": "string, "password": "string" } Join meeting (takes ID, pass) ✅
 - {"request": "leave"} Leave meeting ✅
 
@@ -270,8 +272,8 @@ Server
 - {"response": "info", "type": "joined", "message": "User has joined your meeting."} User joined your meeting
 - {"response": "info", "type": "left", "message": "User has left your meeting."} User left your meeting
 
-- {"response": "success", "type": "switched", "message": "You've transferred the host."} Transferred host
-- {"response": "info", "type": "switched", "message": "You're now the host."} You're now the host
+- {"response": "success", "type": "switched", "message": "You've transferred the host."} Transferred host ✅
+- {"response": "info", "type": "switched", "message": "You're now the host."} You're now the host ✅
 
 - {"response": "error", "reason": "You're already in a meeting."} Error creating (you're already in a meeting) ✅
 - {"response": "error", "reason": "You've already created a meeting in the past x minutes"} Error creating (you've already created a meeting in the past x minutes) ✅
@@ -279,10 +281,10 @@ Server
 - {"response": "error", "reason": "Incorrect password."} Error joining (invalid pass) ✅
 - {"response": "error", "reason": "You're already in a meeting."} Error joining (you're already in a meeting) ✅
 - {"response": "error", "reason": "Meeting is full."} Error joining (meeting is full) ✅
-- {"response": "error", "reason": "You're not in a meeting"} Error leaving (you're not in a meeting)
-- {"response": "error", "reason": "Insufficient permissions."} Error switching (you're not the host)
-- {"response": "error", "reason": "You're not in a meeting"} Error switching (you're not in a meeting)
-- {"response": "error", "reason": "You're alone in the meeting"} Error switching (you're alone in the meeting)
+- {"response": "error", "reason": "You're not in a meeting"} Error leaving (you're not in a meeting) ✅
+- {"response": "error", "reason": "Insufficient permissions."} Error switching (you're not the host) ✅
+- {"response": "error", "reason": "You're not in a meeting"} Error switching (you're not in a meeting) ✅
+- {"response": "error", "reason": "You're alone in the meeting"} Error switching (you're alone in the meeting) ✅
 - {"response": "error", "reason": "Insufficient permissions."} Error ending (you're not the host)
 - {"response": "error", "reason": "You're not in a meeting."} Error ending (you're not in a meeting) 
 
