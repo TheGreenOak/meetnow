@@ -161,6 +161,9 @@ class Signaling(TCPServer):
 
         Parameters:
         user_uuid (str): IP address or other unique identifier.
+
+        Returns:
+        bool: Whether there was another user in the meeting.
         """
 
         # Check if the user is already in a meeting
@@ -169,8 +172,10 @@ class Signaling(TCPServer):
                 raise NotInMeeting
 
         # Remove the user from the meeting
-        self.meetings[self.users[user_uuid]["id"]]["participants"].remove(user_uuid)
         user = self.users[user_uuid]
+        meeting = self.meetings[user["id"]]
+
+        meeting["participants"].remove(user_uuid)
 
         # Log the user out of the database
         if not user["created"]:
@@ -179,6 +184,13 @@ class Signaling(TCPServer):
             del user["id"]
             del user["socket"]
             del user["host"]
+
+        # Check if another user is still in the meeting
+        if len(meeting["participants"]) == 1:
+            meeting["participants"][0]["host"] = True
+            return True
+        
+        return False
 
 
     def switch_host(self, user_uuid):
