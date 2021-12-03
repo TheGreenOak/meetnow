@@ -200,6 +200,9 @@ class Signaling(TCPServer):
 
         Parameters:
         user (str): IP address or other unique identifier.
+
+        Returns:
+        socket: The socket of the new host.
         """
 
         # Check if the user is already in a meeting
@@ -218,10 +221,15 @@ class Signaling(TCPServer):
         if len(meeting["participants"]) < MAX_PARTICIPANTS:
             raise AloneInMeeting
 
+        # Acquire the new host
+        new_host_index = 1 if meeting["participants"][0] == user else 0
+        new_host = meeting["participants"][new_host_index]
+
         # Switch the host
-        new_host = 1 if meeting["participants"][0] == user else 0
         user["host"] = False
-        meeting["participants"][new_host]["host"] = True
+        new_host["host"] = True
+
+        return new_host["socket"]
 
 
     def handle_client(self, client):
