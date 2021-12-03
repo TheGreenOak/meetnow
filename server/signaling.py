@@ -9,11 +9,9 @@ import string  # For easy access to ASCII characters
 MAX_MESSAGE_LENGTH = 128
 MAX_MEETING_LENGTH = 5 # In minutes
 MAX_PARTICIPANTS = 2
+
 PASSWORD_LENGTH = 12
 MEETING_ID_LENGTH = 9
-
-SOCKET = 0
-IP_ADDRESS = 1
 
 
 class AlreadyCreated(Exception):
@@ -40,6 +38,14 @@ class MeetingFull(Exception):
     pass
 
 
+class AloneInMeeting(Exception):
+    pass
+
+
+class InsufficientPermissions(Exception):
+    pass
+
+
 class Signaling(TCPServer):
     """
     The Signaling server is responsible for creating and assigning ID's to meetings.
@@ -57,21 +63,21 @@ class Signaling(TCPServer):
         self.users = {}
     
 
-    def create_meeting(self, user):
+    def create_meeting(self, user_uuid):
         """
         Attempts to create a new meeting, and store it in the database.
         If the user cannot do so, an exception will be raised.
 
         Parameters:
-        user (str): IP address or other unique identifier.
+        user_uuid (str): IP address or other unique identifier.
 
         Returns: 
         tuple: The ID of the meeting, and its password.
         """
 
         # Check if the user is already in a meeting, or if they are already created one
-        if self.users.get(user):
-            if self.users[user]["created"]:
+        if self.users.get(user_uuid):
+            if self.users[user_uuid]["created"]:
                 raise AlreadyCreated
             else:
                 raise InMeeting
@@ -84,23 +90,24 @@ class Signaling(TCPServer):
         self.meetings[meeting_id] = {
             "password": password,
             "participants": [],
-            "creator": user,
+            "creator": user_uuid,
             "expiration": MAX_MEETING_LENGTH
         }
 
         # Log the meeting creator so that abuse can be prevented
-        self.users[user] = { "created": True }
+        self.users[user_uuid] = { "created": True }
 
         return (meeting_id, password)
 
 
-    def join_meeting(self, user, meeting_id, password):
+    def join_meeting(self, user_uuid, user_sock, meeting_id, password):
         """
         Attempts to join a meeting.
         If the user cannot do so, an exception will be raised.
 
         Parameters:
-        user (socket, str): Tuple of socket and IP address or other unique identifier.
+        user_uuid (str): IP address or other unique identifier.
+        user_sock (socket): The socket of the user.
         meeting_id (str): The ID of the meeting.
         password (str): The password of the meeting.
 
@@ -109,63 +116,95 @@ class Signaling(TCPServer):
         """
 
         # Check if the user is already in a meeting
-        if self.users.get(user[IP_ADDRESS]):
-            if not self.users[user]["created"]:
+        if self.users.get(user_uuid):
+            if not self.users[user_uuid]["created"]:
                 raise InMeeting
 
         # Check if the meeting exists
         if not self.meetings.get(meeting_id):
             raise InvalidMeetingID
+        
+        meeting = self.meetings[meeting_id]
 
         # Check if the password is correct
-        if self.meetings[meeting_id]["password"] != password:
+        if meeting["password"] != password:
             raise InvalidPassword
 
         # Check if the meeting is full
-        if len(self.meetings[meeting_id]["participants"]) >= MAX_PARTICIPANTS:
+        if len(meeting["participants"]) >= MAX_PARTICIPANTS:
             raise MeetingFull
 
         # Add the user to the meeting
-        self.meetings[meeting_id]["participants"].append(user)
+        meeting["participants"].append(user_uuid)
 
         # Log the user into the database
-        if not self.users.get(user):
-            self.users[user[IP_ADDRESS]] = { "created": False }
-        self.users[user[IP_ADDRESS]]["id"] = meeting_id
-        self.users[user[IP_ADDRESS]]["socket"] = user[SOCKET]
+        if not self.users.get(user_uuid):
+            self.users[user_uuid] = { "created": False }
+        
+        user = self.users[user_uuid]
+        user["id"] = meeting_id
+        user["socket"] = user_sock
         
         # Check if user deserves host privileges
-        if len(self.meetings[meeting_id]["participants"]) == 1:
-            self.users[user[IP_ADDRESS]]["host"] = True
+        if len(meeting["participants"]) == 1:
+            user["host"] = True
         else:
-            self.users[user[IP_ADDRESS]]["host"] = False
+            user["host"] = False
         
-        return self.users[user[IP_ADDRESS]]["host"]
+        return user["host"]
 
 
-    def leave_meeting(self, user):
+    def leave_meeting(self, user_uuid):
         """
         Attempts to leave the meeting.
         If the user cannot do so, an exception will be raised.
+
+        Parameters:
+        user_uuid (str): IP address or other unique identifier.
+        """
+
+        # Check if the user is already in a meeting
+        if not self.users.get(user_uuid):
+            raise NotInMeeting
+
+        # Remove the user from the meeting
+        self.meetings[self.users[user_uuid]["id"]]["participants"].remove(user_uuid)
+        user = self.users[user_uuid]
+
+        # Log the user out of the database
+        if not user["created"]:
+            del user
+        else:
+            del user["id"]
+            del user["socket"]
+            del user["host"]
+
+
+    def switch_host(self, user_uuid):
+        """
+        Switches the host of the meeting.
 
         Parameters:
         user (str): IP address or other unique identifier.
         """
 
         # Check if the user is already in a meeting
-        if not self.users.get(user):
+        if not self.users.get(user_uuid):
             raise NotInMeeting
+        
+        user = self.users[user_uuid]
+        meeting = self.meetings[user["id"]]
 
-        # Remove the user from the meeting
-        self.meetings[self.users[user]["id"]]["participants"].remove(user)
+        # Check if the user is the host
+        if not user["host"]:
+            raise InsufficientPermissions
+        
+        # Check if the meeting has another user
+        if len(meeting["participants"]) < MAX_PARTICIPANTS:
+            raise AloneInMeeting
 
-        # Log the user out of the database
-        del self.users[user]["id"]
-        del self.users[user]["socket"]
-        del self.users[user]["host"]
-
-        if not self.users[user]["created"]:
-            del self.users[user]
+        # Switch the host
+        # TODO: ^
 
 
     def handle_client(self, client):
@@ -218,15 +257,15 @@ Client
 - {"request": "start"} Start new meeting ✅
 - {"request": "stop"} Stop meeting (only if you're host)
 - {"request": "switch"} Transfer host
-- {"request": "join", "id": "string, "password": "string" } Join meeting (takes ID, pass)
-- {"request": "leave"} Leave meeting
+- {"request": "join", "id": "string, "password": "string" } Join meeting (takes ID, pass) ✅
+- {"request": "leave"} Leave meeting ✅
 
 Server
 - {"response": "success", "type": "started", "id": "string", "message": "Meeting started."} Meeting started ✅
 - {"response": "success", "type": "stopped", "message": "Meeting stopped."} Meeting stopped
 
-- {"response": "success", "type": "joined", "host": boolean, "message": "You've joined the meeting"} You joined the meeting
-- {"response": "success", "type": "left", "message": "You've left the meeting"} You left the meeting
+- {"response": "success", "type": "joined", "host": boolean, "message": "You've joined the meeting"} You joined the meeting ✅
+- {"response": "success", "type": "left", "message": "You've left the meeting"} You left the meeting ✅
 
 - {"response": "info", "type": "joined", "message": "User has joined your meeting."} User joined your meeting
 - {"response": "info", "type": "left", "message": "User has left your meeting."} User left your meeting
@@ -236,12 +275,14 @@ Server
 
 - {"response": "error", "reason": "You're already in a meeting."} Error creating (you're already in a meeting) ✅
 - {"response": "error", "reason": "You've already created a meeting in the past x minutes"} Error creating (you've already created a meeting in the past x minutes) ✅
-- {"response": "error", "reason": "Invalid meeting ID."} Error joining (invalid ID)
-- {"response": "error", "reason": "Incorrect password."} Error joining (invalid pass)
-- {"response": "error", "reason": "You're already in a meeting."} Error joining (you're already in a meeting)
-- {"response": "error", "reason": "Meeting is full."} Error joining (meeting is full)
+- {"response": "error", "reason": "Invalid meeting ID."} Error joining (invalid ID) ✅
+- {"response": "error", "reason": "Incorrect password."} Error joining (invalid pass) ✅
+- {"response": "error", "reason": "You're already in a meeting."} Error joining (you're already in a meeting) ✅
+- {"response": "error", "reason": "Meeting is full."} Error joining (meeting is full) ✅
 - {"response": "error", "reason": "You're not in a meeting"} Error leaving (you're not in a meeting)
-- {"response": "error", "reason": "Insufficient permissions."} Error transferring (you're not the host)
+- {"response": "error", "reason": "Insufficient permissions."} Error switching (you're not the host)
+- {"response": "error", "reason": "You're not in a meeting"} Error switching (you're not in a meeting)
+- {"response": "error", "reason": "You're alone in the meeting"} Error switching (you're alone in the meeting)
 - {"response": "error", "reason": "Insufficient permissions."} Error ending (you're not the host)
 - {"response": "error", "reason": "You're not in a meeting."} Error ending (you're not in a meeting) 
 
