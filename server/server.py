@@ -94,22 +94,6 @@ class UDPServer:
         self.socket.close()
 
 
-def serialize(data):
-    """
-    Serializes a data object into a JSON string.
-    Error handling is not implemented. You're on your own.
-    """
-    return json.dumps(data)
-
-
-def deserialize(data):
-    """
-    Deserializes a JSON string into a data object.
-    Error handling is not implemented. You're on your own.
-    """
-    return json.loads(data)
-
-
 def handle_tcp_client(server, client, address):
     """
     Handles a TCP client.

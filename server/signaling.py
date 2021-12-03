@@ -63,7 +63,7 @@ class Signaling(TCPServer):
         self.users = {}
     
 
-    def create_meeting(self, user_uuid):
+    def create_meeting(self, user_uuid) -> tuple[str, str]:
         """
         Attempts to create a new meeting, and store it in the database.
         If the user cannot do so, an exception will be raised.
@@ -112,7 +112,7 @@ class Signaling(TCPServer):
         password (str): The password of the meeting.
 
         Returns: 
-        bool: Whether the user is a host or not.
+        socket | None: The other user's socket.
         """
 
         # Check if the user is already in a meeting
@@ -142,6 +142,8 @@ class Signaling(TCPServer):
             self.users[user_uuid] = { "created": False }
         
         user = self.users[user_uuid]
+        other_user = None
+
         user["id"] = meeting_id
         user["socket"] = user_sock
         
@@ -150,8 +152,9 @@ class Signaling(TCPServer):
             user["host"] = True
         else:
             user["host"] = False
+            other_user = self.users[meeting["participants"][0]]["socket"]
         
-        return user["host"]
+        return other_user
 
 
     def leave_meeting(self, user_uuid):
@@ -163,7 +166,7 @@ class Signaling(TCPServer):
         user_uuid (str): IP address or other unique identifier.
 
         Returns:
-        bool: Whether there was another user in the meeting.
+        socket | None: The remaining user's socket.
         """
 
         # Check if the user is already in a meeting
@@ -173,6 +176,7 @@ class Signaling(TCPServer):
 
         # Remove the user from the meeting
         user = self.users[user_uuid]
+        remaining_user = None
         meeting = self.meetings[user["id"]]
 
         meeting["participants"].remove(user_uuid)
@@ -187,10 +191,10 @@ class Signaling(TCPServer):
 
         # Check if another user is still in the meeting
         if len(meeting["participants"]) == 1:
-            meeting["participants"][0]["host"] = True
-            return True
+            remaining_user = self.users[meeting["participants"][0]]["socket"]
+            remaining_user["host"] = True
         
-        return False
+        return remaining_user
 
 
     def switch_host(self, user_uuid):
@@ -223,7 +227,7 @@ class Signaling(TCPServer):
 
         # Acquire the new host
         new_host_index = 1 if meeting["participants"][0] == user else 0
-        new_host = meeting["participants"][new_host_index]
+        new_host = self.users[meeting["participants"][new_host_index]]
 
         # Switch the host
         user["host"] = False
@@ -250,7 +254,7 @@ class Signaling(TCPServer):
                 raise NotInMeeting
         
         user = self.users[user_uuid]
-        second_user = None
+        second_user_sock = None
         meeting = self.meetings[user["id"]]
 
         # Check if the user is the host
@@ -260,7 +264,7 @@ class Signaling(TCPServer):
         # Check if the meeting has another user
         if len(meeting["participants"]) == MAX_PARTICIPANTS:
             second_user_index = 1 if meeting["participants"][0] == user else 0
-            second_user = meeting["participants"][second_user_index]
+            second_user = self.users[meeting["participants"][second_user_index]]
         
         # Remove the meeting from the database
         del meeting
@@ -275,6 +279,7 @@ class Signaling(TCPServer):
 
         # Log the second user out of the database
         if second_user:
+            second_user_sock = [second_user["socket"]][:][0] # We do this mess to copy the socket by value
             if not second_user["created"]:
                 del second_user
             else:
@@ -282,7 +287,7 @@ class Signaling(TCPServer):
                 del second_user["socket"]
                 del second_user["host"]
         
-        return second_user["socket"] if second_user else None
+        return second_user_sock
 
 
     def handle_client(self, client):
