@@ -15,35 +15,35 @@ MEETING_ID_LENGTH = 9
 
 
 class AlreadyCreated(Exception):
-    pass
+    reason = "You've already created a meeting recently"
 
 
 class InMeeting(Exception):
-    pass
+    reason = "You're already in a meeting"
 
 
 class NotInMeeting(Exception):
-    pass
+    reason = "You're not in a meeting"
 
 
 class InvalidMeetingID(Exception):
-    pass
+    reason = "An invalid meeting ID was entered"
 
 
 class InvalidPassword(Exception):
-    pass
+    reason = "The password for this meeting is incorrect"
 
 
 class MeetingFull(Exception):
-    pass
+    reason = "This meeting is full"
 
 
 class AloneInMeeting(Exception):
-    pass
+    reason = "You're alone in this meeting"
 
 
 class InsufficientPermissions(Exception):
-    pass
+    reason = "Insufficient permissions"
 
 
 class Signaling(TCPServer):
