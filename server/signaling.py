@@ -1,4 +1,6 @@
-from server import TCPServer, serialize, deserialize
+from server import TCPServer
+from json import loads as deserialize, dumps as serialize
+from threading import Thread
 from uuid import uuid4 as generate_uuid
 
 import secrets # Cryptographically secure way to randomly choose
@@ -12,6 +14,9 @@ MAX_PARTICIPANTS = 2
 
 PASSWORD_LENGTH = 12
 MEETING_ID_LENGTH = 9
+
+class InvalidRequest(Exception):
+    reason = "Invalid request"
 
 
 class AlreadyCreated(Exception):
@@ -294,8 +299,6 @@ class Signaling(TCPServer):
         pass
 
 
-    def handle_message(self, client, message):
-        pass
 
     
 def test():
@@ -325,6 +328,69 @@ def test():
         s.join_meeting("101", meeting[0], meeting[1])
     except InMeeting:
         print("Passed")
+    def handle_message(self, ip, sock, message):
+        """
+        Handles all requests from the client.
+        Returns the messages that need to be sent to each client after the request.
+
+        Parameters:
+        ip (str): The client's IP
+        sock (socket): The client's socket
+
+        Returns:
+        list: A list of tuples with the messages needed to be sent to each socket.
+        """
+
+        responses = []
+
+        try:
+            try:
+                request = deserialize(message)
+            except:
+                raise InvalidRequest
+                
+            if not request.get("request"):
+                raise InvalidRequest
+            
+            if request["request"] == "start":
+                id, password = self.create_meeting(ip)
+                responses.append((sock, serialize({"response": "success", "id": id, "password": password})))
+            
+            elif request["request"] == "join":
+                if not request.get("id") or not request.get("password"):
+                    raise InvalidRequest
+                
+                other_client = self.join_meeting(ip, sock, request["id"], request["password"])
+                if other_client:
+                    responses.append((sock, serialize({"response": "success", "host": False})))
+                    responses.append((other_client, serialize({"response": "info", "type": "joined"})))
+                else:
+                    responses.append((sock, serialize({"response": "success", "host": True})))
+            
+            elif request["request"] == "switch":
+                new_host = self.switch_host(ip)
+                responses.append((sock, serialize({"response": "success"})))
+                responses.append((new_host, serialize({"response": "info", "type": "switched"})))
+            
+            elif request["request"] == "leave":
+                remaining_user = self.leave_meeting(ip)
+                responses.append((sock, serialize({"response": "success"})))
+                if remaining_user:
+                    responses.append((remaining_user, serialize({"response": "info", "type": "left"})))
+
+            elif request["request"] == "end":
+                remaining_user = self.end_meeting(ip)
+                responses.append((sock, serialize({"response": "success"})))
+                if remaining_user:
+                    responses.append((remaining_user, serialize({"response": "info", "type": "ended"})))
+
+            else:
+                raise InvalidRequest
+
+        except Exception as e:
+            responses.append((sock, serialize({"response": "error", "reason": e.reason})))
+        
+        return responses
 
 
 def main():
