@@ -117,7 +117,7 @@ class Signaling(TCPServer):
 
         # Check if the user is already in a meeting
         if self.users.get(user_uuid):
-            if not self.users[user_uuid]["created"]:
+            if self.users[user_uuid].get("id"):
                 raise InMeeting
 
         # Check if the meeting exists
@@ -164,8 +164,9 @@ class Signaling(TCPServer):
         """
 
         # Check if the user is already in a meeting
-        if not self.users.get(user_uuid):
-            raise NotInMeeting
+        if self.users.get(user_uuid):
+            if not self.users[user_uuid].get("id"):
+                raise NotInMeeting
 
         # Remove the user from the meeting
         self.meetings[self.users[user_uuid]["id"]]["participants"].remove(user_uuid)
@@ -183,14 +184,16 @@ class Signaling(TCPServer):
     def switch_host(self, user_uuid):
         """
         Switches the host of the meeting.
+        If the user cannot do so, an exception will be raised.
 
         Parameters:
         user (str): IP address or other unique identifier.
         """
 
         # Check if the user is already in a meeting
-        if not self.users.get(user_uuid):
-            raise NotInMeeting
+        if self.users.get(user_uuid):
+            if not self.users[user_uuid].get("id"):
+                raise NotInMeeting
         
         user = self.users[user_uuid]
         meeting = self.meetings[user["id"]]
