@@ -3,8 +3,9 @@ from json import loads as deserialize, dumps as serialize
 from threading import Thread
 from uuid import uuid4 as generate_uuid
 
-import secrets # Cryptographically secure way to randomly choose
-import string  # For easy access to ASCII characters
+import secrets   # Cryptographically secure way to randomly choose
+import string    # For easy access to ASCII characters
+import traceback # Error reporting
 
 
 # Constants
@@ -299,19 +300,33 @@ class Signaling(TCPServer):
 
 
     def handle_client(self, client, address):
+        """
+        A thread for handling a Signaling client.
+
+        Parameters:
+        client (socket): The client's socket.
+        address (tuple): The client's address.
+        """
         try:
+            # We want to run until the server is forcefully shut down
             while self.keep_running:
                 try:
                     data = client.recv(MAX_MESSAGE_LENGTH)
                     if not data:
                         break
 
+                    # Forward the message to the handler, and send all the responses to the respective clients
                     for sock, message in self.handle_message(address[0], client, data.decode()):
                         sock.send(message.encode())
                 except BlockingIOError:
                     pass
         except:
-            pass
+            # An unknown error has occurred
+            print("CRITICAL: An unknown error has occurred.")
+            print("Client: {}:{}".format(address[0], address[1]))
+            print("Message: {}".format(data.decode()))
+            print(traceback.format_exc())
+            
         finally:
             print("[DISCONNECTED] {}:{}".format(address[0], address[1]))
             client.close()
