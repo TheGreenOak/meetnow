@@ -230,6 +230,59 @@ class Signaling(TCPServer):
         new_host["host"] = True
 
         return new_host["socket"]
+    
+
+    def end_meeting(self, user_uuid):
+        """
+        Attempts to end the meeting.
+        If the user cannot do so, an exception will be raised.
+
+        Parameters:
+        user_uuid (str): IP address or other unique identifier.
+
+        Returns:
+        socket | none: The socket of the remaining participant.
+        """
+
+        # Check if the user is already in a meeting
+        if self.users.get(user_uuid):
+            if not self.users[user_uuid].get("id"):
+                raise NotInMeeting
+        
+        user = self.users[user_uuid]
+        second_user = None
+        meeting = self.meetings[user["id"]]
+
+        # Check if the user is the host
+        if not user["host"]:
+            raise InsufficientPermissions
+        
+        # Check if the meeting has another user
+        if len(meeting["participants"]) == MAX_PARTICIPANTS:
+            second_user_index = 1 if meeting["participants"][0] == user else 0
+            second_user = meeting["participants"][second_user_index]
+        
+        # Remove the meeting from the database
+        del meeting
+
+        # Log the user out of the database
+        if not user["created"]:
+            del user
+        else:
+            del user["id"]
+            del user["socket"]
+            del user["host"]
+
+        # Log the second user out of the database
+        if second_user:
+            if not second_user["created"]:
+                del second_user
+            else:
+                del second_user["id"]
+                del second_user["socket"]
+                del second_user["host"]
+        
+        return second_user["socket"] if second_user else None
 
 
     def handle_client(self, client):
@@ -280,14 +333,14 @@ if __name__ == "__main__":
 """
 Client
 - {"request": "start"} Start new meeting ✅
-- {"request": "stop"} Stop meeting (only if you're host)
+- {"request": "stop"} Stop meeting (only if you're host) ✅
 - {"request": "switch"} Transfer host ✅
 - {"request": "join", "id": "string, "password": "string" } Join meeting (takes ID, pass) ✅
 - {"request": "leave"} Leave meeting ✅
 
 Server
 - {"response": "success", "type": "started", "id": "string", "message": "Meeting started."} Meeting started ✅
-- {"response": "success", "type": "stopped", "message": "Meeting stopped."} Meeting stopped
+- {"response": "success", "type": "stopped", "message": "Meeting stopped."} Meeting stopped ✅
 
 - {"response": "success", "type": "joined", "host": boolean, "message": "You've joined the meeting"} You joined the meeting ✅
 - {"response": "success", "type": "left", "message": "You've left the meeting"} You left the meeting ✅
@@ -308,8 +361,8 @@ Server
 - {"response": "error", "reason": "Insufficient permissions."} Error switching (you're not the host) ✅
 - {"response": "error", "reason": "You're not in a meeting"} Error switching (you're not in a meeting) ✅
 - {"response": "error", "reason": "You're alone in the meeting"} Error switching (you're alone in the meeting) ✅
-- {"response": "error", "reason": "Insufficient permissions."} Error ending (you're not the host)
-- {"response": "error", "reason": "You're not in a meeting."} Error ending (you're not in a meeting) 
+- {"response": "error", "reason": "Insufficient permissions."} Error ending (you're not the host) ✅
+- {"response": "error", "reason": "You're not in a meeting."} Error ending (you're not in a meeting) ✅
 
 Request Types: ["start", "stop", "switch", "join", "leave"]
 Responses: ["success", "info", "error"]
