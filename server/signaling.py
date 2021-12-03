@@ -15,6 +15,9 @@ MAX_PARTICIPANTS = 2
 PASSWORD_LENGTH = 12
 MEETING_ID_LENGTH = 9
 
+SERVER_PORT = 522
+
+
 class InvalidRequest(Exception):
     reason = "Invalid request"
 
@@ -295,39 +298,25 @@ class Signaling(TCPServer):
         return second_user_sock
 
 
-    def handle_client(self, client):
-        pass
+    def handle_client(self, client, address):
+        try:
+            while self.keep_running:
+                try:
+                    data = client.recv(MAX_MESSAGE_LENGTH)
+                    if not data:
+                        break
+
+                    for sock, message in self.handle_message(address[0], client, data.decode()):
+                        sock.send(message.encode())
+                except BlockingIOError:
+                    pass
+        except:
+            pass
+        finally:
+            print("[DISCONNECTED] {}:{}".format(address[0], address[1]))
+            client.close()
 
 
-
-    
-def test():
-    s = Signaling(522)
-    
-    # Randomness tester
-    print("Random Test")
-    for i in range(10):
-        print(s.create_meeting(str(i)))
-    print("Passed", end="\n\n")
-    
-    # Already created tester
-    print("Already Created Test - ", end='')
-    try:
-        s.create_meeting("1")
-    except AlreadyCreated:
-        print("Passed")
-    except:
-        print("Failed")
-    
-    # Join meeting tester
-    print("Join Meeting Test - ", end='')
-    try:
-        meeting = s.create_meeting("100")
-        s.join_meeting("100", meeting[0], meeting[1])
-        s.join_meeting("101", meeting[0], meeting[1])
-        s.join_meeting("101", meeting[0], meeting[1])
-    except InMeeting:
-        print("Passed")
     def handle_message(self, ip, sock, message):
         """
         Handles all requests from the client.
@@ -394,7 +383,33 @@ def test():
 
 
 def main():
-    test()
+    server = Signaling(SERVER_PORT)
+    server.start()
+    server.toggle_blocking_mode()
+
+    print("Signaling server started")
+    clients = []
+
+    try:
+        while True:
+            try:
+                client, address = server.accept()
+                print("[CONNECTED] {}:{}".format(address[0], address[1]))
+
+                # Make a new thread to handle the client, and store it in the list.
+                client_thread = Thread(target=server.handle_client, args=(client, address))
+                client_thread.start()
+                clients.append(client_thread)
+            except BlockingIOError:
+                pass
+    except KeyboardInterrupt:
+        server.keep_running = False
+
+        for thread in clients:
+            thread.join()
+
+        print("\nStopping server...")
+        server.stop()
 
 
 if __name__ == "__main__":
