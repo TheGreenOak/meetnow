@@ -12,12 +12,19 @@ MAX_PARTICIPANTS = 2
 PASSWORD_LENGTH = 12
 MEETING_ID_LENGTH = 9
 
+SOCKET = 0
+IP_ADDRESS = 1
+
 
 class AlreadyCreated(Exception):
     pass
 
 
 class InMeeting(Exception):
+    pass
+
+
+class NotInMeeting(Exception):
     pass
 
 
@@ -55,8 +62,11 @@ class Signaling(TCPServer):
         Attempts to create a new meeting, and store it in the database.
         If the user cannot do so, an exception will be raised.
 
-        user: IP address or other unique identifier.
-        returns: The ID of the meeting, and its password.
+        Parameters:
+        user (str): IP address or other unique identifier.
+
+        Returns: 
+        tuple: The ID of the meeting, and its password.
         """
 
         # Check if the user is already in a meeting, or if they are already created one
@@ -89,14 +99,17 @@ class Signaling(TCPServer):
         Attempts to join a meeting.
         If the user cannot do so, an exception will be raised.
 
-        user: IP address or other unique identifier.
-        meeting_id: The ID of the meeting.
-        password: The password of the meeting.
-        returns: Whether the user is a host or not.
+        Parameters:
+        user (socket, str): Tuple of socket and IP address or other unique identifier.
+        meeting_id (str): The ID of the meeting.
+        password (str): The password of the meeting.
+
+        Returns: 
+        bool: Whether the user is a host or not.
         """
 
         # Check if the user is already in a meeting
-        if self.users.get(user):
+        if self.users.get(user[IP_ADDRESS]):
             if not self.users[user]["created"]:
                 raise InMeeting
 
@@ -117,16 +130,42 @@ class Signaling(TCPServer):
 
         # Log the user into the database
         if not self.users.get(user):
-            self.users[user] = { "created": False }
-        self.users[user]["id"] = meeting_id
+            self.users[user[IP_ADDRESS]] = { "created": False }
+        self.users[user[IP_ADDRESS]]["id"] = meeting_id
+        self.users[user[IP_ADDRESS]]["socket"] = user[SOCKET]
         
         # Check if user deserves host privileges
         if len(self.meetings[meeting_id]["participants"]) == 1:
-            self.users[user]["host"] = True
+            self.users[user[IP_ADDRESS]]["host"] = True
         else:
-            self.users[user]["host"] = False
+            self.users[user[IP_ADDRESS]]["host"] = False
         
-        return self.users[user]["host"]
+        return self.users[user[IP_ADDRESS]]["host"]
+
+
+    def leave_meeting(self, user):
+        """
+        Attempts to leave the meeting.
+        If the user cannot do so, an exception will be raised.
+
+        Parameters:
+        user (str): IP address or other unique identifier.
+        """
+
+        # Check if the user is already in a meeting
+        if not self.users.get(user):
+            raise NotInMeeting
+
+        # Remove the user from the meeting
+        self.meetings[self.users[user]["id"]]["participants"].remove(user)
+
+        # Log the user out of the database
+        del self.users[user]["id"]
+        del self.users[user]["socket"]
+        del self.users[user]["host"]
+
+        if not self.users[user]["created"]:
+            del self.users[user]
 
 
     def handle_client(self, client):
@@ -164,7 +203,6 @@ def test():
         s.join_meeting("101", meeting[0], meeting[1])
     except InMeeting:
         print("Passed")
-
 
 
 def main():
@@ -217,7 +255,8 @@ Python Dictionary
 {"meeting id": {
   "password": "hashed pass",
   "participants": int,
-  "creator": "ip"
+  "creator": "ip",
+  "ttl": int
   }
 }
 
