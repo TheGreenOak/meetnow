@@ -200,10 +200,10 @@ class Signaling(TCPServer):
 
         # Check if another user is still in the meeting
         if len(meeting["participants"]) == 1:
-            remaining_user = self.users[meeting["participants"][0]]["socket"]
+            remaining_user = self.users[meeting["participants"][0]]
             remaining_user["host"] = True
         
-        return remaining_user
+        return remaining_user["socket"]
 
 
     def switch_host(self, user_uuid):
