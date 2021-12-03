@@ -380,6 +380,28 @@ class Signaling(TCPServer):
             responses.append((sock, serialize({"response": "error", "reason": e.reason})))
         
         return responses
+    
+
+    def run(self):
+        clients = []
+
+        try:
+            while True:
+                try:
+                    client, address = self.accept()
+                    print("[CONNECTED] {}:{}".format(address[0], address[1]))
+
+                    # Make a new thread to handle the client, and store it in the list.
+                    client_thread = Thread(target=self.handle_client, args=(client, address))
+                    client_thread.start()
+                    clients.append(client_thread)
+                except BlockingIOError:
+                    pass
+        except KeyboardInterrupt:
+            self.keep_running = False
+
+            for thread in clients:
+                thread.join()
 
 
 def main():
@@ -388,28 +410,10 @@ def main():
     server.toggle_blocking_mode()
 
     print("Signaling server started")
-    clients = []
+    server.run() # Blocking method - will continue running until the admin presses Ctrl+C
 
-    try:
-        while True:
-            try:
-                client, address = server.accept()
-                print("[CONNECTED] {}:{}".format(address[0], address[1]))
-
-                # Make a new thread to handle the client, and store it in the list.
-                client_thread = Thread(target=server.handle_client, args=(client, address))
-                client_thread.start()
-                clients.append(client_thread)
-            except BlockingIOError:
-                pass
-    except KeyboardInterrupt:
-        server.keep_running = False
-
-        for thread in clients:
-            thread.join()
-
-        print("\nStopping server...")
-        server.stop()
+    print("\nStopping server...")
+    server.stop()
 
 
 if __name__ == "__main__":
