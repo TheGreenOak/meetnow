@@ -20,7 +20,10 @@ class Stun(UDPServer):
                     # In UDP, there are no sockets. Therefore, we just need to receive data.
                     data, address = self.recv()
                     print("[{}:{}] {}".format(address[0], address[1], data.decode()))
-                    self.send(address, data)
+                    ip_and_port = "IP: " + str(address[0]) + " Port: " + str(address[1])
+                    print(ip_and_port)
+                    ip_and_port = ip_and_port.encode()
+                    self.send(address, ip_and_port)
                 except BlockingIOError:
                     pass
         except KeyboardInterrupt:
