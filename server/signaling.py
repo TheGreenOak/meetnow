@@ -16,7 +16,7 @@ MAX_PARTICIPANTS = 2
 PASSWORD_LENGTH = 12
 MEETING_ID_LENGTH = 9
 
-SERVER_PORT = 522
+SERVER_PORT = 888
 
 
 class InvalidRequest(Exception):
@@ -72,7 +72,7 @@ class Signaling(TCPServer):
         self.users = {}
     
 
-    def create_meeting(self, user_uuid) -> tuple[str, str]:
+    def create_meeting(self, user_uuid):
         """
         Attempts to create a new meeting, and store it in the database.
         If the user cannot do so, an exception will be raised.
@@ -433,61 +433,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-"""
-Client
-- {"request": "start"} Start new meeting ✅
-- {"request": "stop"} Stop meeting (only if you're host) ✅
-- {"request": "switch"} Transfer host ✅
-- {"request": "join", "id": "string, "password": "string" } Join meeting (takes ID, pass) ✅
-- {"request": "leave"} Leave meeting ✅
-
-Server
-- {"response": "success", "type": "started", "id": "string", "message": "Meeting started."} Meeting started ✅
-- {"response": "success", "type": "stopped", "message": "Meeting stopped."} Meeting stopped ✅
-
-- {"response": "success", "type": "joined", "host": boolean, "message": "You've joined the meeting"} You joined the meeting ✅
-- {"response": "success", "type": "left", "message": "You've left the meeting"} You left the meeting ✅
-
-- {"response": "info", "type": "joined", "message": "User has joined your meeting."} User joined your meeting
-- {"response": "info", "type": "left", "message": "User has left your meeting."} User left your meeting
-
-- {"response": "success", "type": "switched", "message": "You've transferred the host."} Transferred host ✅
-- {"response": "info", "type": "switched", "message": "You're now the host."} You're now the host ✅
-
-- {"response": "error", "reason": "You're already in a meeting."} Error creating (you're already in a meeting) ✅
-- {"response": "error", "reason": "You've already created a meeting in the past x minutes"} Error creating (you've already created a meeting in the past x minutes) ✅
-- {"response": "error", "reason": "Invalid meeting ID."} Error joining (invalid ID) ✅
-- {"response": "error", "reason": "Incorrect password."} Error joining (invalid pass) ✅
-- {"response": "error", "reason": "You're already in a meeting."} Error joining (you're already in a meeting) ✅
-- {"response": "error", "reason": "Meeting is full."} Error joining (meeting is full) ✅
-- {"response": "error", "reason": "You're not in a meeting"} Error leaving (you're not in a meeting) ✅
-- {"response": "error", "reason": "Insufficient permissions."} Error switching (you're not the host) ✅
-- {"response": "error", "reason": "You're not in a meeting"} Error switching (you're not in a meeting) ✅
-- {"response": "error", "reason": "You're alone in the meeting"} Error switching (you're alone in the meeting) ✅
-- {"response": "error", "reason": "Insufficient permissions."} Error ending (you're not the host) ✅
-- {"response": "error", "reason": "You're not in a meeting."} Error ending (you're not in a meeting) ✅
-
-Request Types: ["start", "stop", "switch", "join", "leave"]
-Responses: ["success", "info", "error"]
-Response Types: ["started", "stopped", "joined", "left", "switched"] 
-
-Database
-Python Dictionary
-
-{"meeting id": {
-  "password": "hashed pass",
-  "participants": int,
-  "creator": "ip",
-  "ttl": int
-  }
-}
-
-{"ip": {
-  "created": boolean
-  "id": "meeting id",
-  "is_host": boolean
-}
- 
-    """
