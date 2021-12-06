@@ -185,14 +185,14 @@ class Signaling(TCPServer):
 
         # Remove the user from the meeting
         user = self.users[user_uuid]
-        remaining_user = None
+        remaining_user_sock = None
         meeting = self.meetings[user["id"]]
 
         meeting["participants"].remove(user_uuid)
 
         # Log the user out of the database
         if not user["created"]:
-            del user
+            del self.users[user_uuid]
         else:
             del user["id"]
             del user["socket"]
@@ -202,8 +202,9 @@ class Signaling(TCPServer):
         if len(meeting["participants"]) == 1:
             remaining_user = self.users[meeting["participants"][0]]
             remaining_user["host"] = True
+            remaining_user_sock = remaining_user["socket"]
         
-        return remaining_user["socket"]
+        return remaining_user_sock
 
 
     def switch_host(self, user_uuid):
@@ -235,7 +236,7 @@ class Signaling(TCPServer):
             raise AloneInMeeting
 
         # Acquire the new host
-        new_host_index = 1 if meeting["participants"][0] == user else 0
+        new_host_index = 1 if self.users[meeting["participants"][0]] == user else 0
         new_host = self.users[meeting["participants"][new_host_index]]
 
         # Switch the host
@@ -263,6 +264,7 @@ class Signaling(TCPServer):
                 raise NotInMeeting
         
         user = self.users[user_uuid]
+        second_user = None
         second_user_sock = None
         meeting = self.meetings[user["id"]]
 
@@ -272,29 +274,19 @@ class Signaling(TCPServer):
         
         # Check if the meeting has another user
         if len(meeting["participants"]) == MAX_PARTICIPANTS:
-            second_user_index = 1 if meeting["participants"][0] == user else 0
+            second_user_index = 1 if self.users[meeting["participants"][0]] == user else 0
             second_user = self.users[meeting["participants"][second_user_index]]
         
         # Remove the meeting from the database
-        del meeting
+        del self.meetings[user["id"]]
 
         # Log the user out of the database
-        if not user["created"]:
-            del user
-        else:
-            del user["id"]
-            del user["socket"]
-            del user["host"]
+        del self.users[user_uuid]
 
         # Log the second user out of the database
         if second_user:
             second_user_sock = [second_user["socket"]][:][0] # We do this mess to copy the socket by value
-            if not second_user["created"]:
-                del second_user
-            else:
-                del second_user["id"]
-                del second_user["socket"]
-                del second_user["host"]
+            
         
         return second_user_sock
 
