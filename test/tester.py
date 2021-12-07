@@ -4,6 +4,8 @@ import threading
 
 TCP = 1
 UDP = 2
+DEFAULT_SPORT = 13377
+
 
 
 class Connection:
@@ -93,12 +95,14 @@ def recv_continously(conn):
 def main():
     print("Welcome to the basic server tester.")
 
-    print("Please enter the IP address of the server you want to connect to: ", end="")
+    print("Please enter the IP address of the server you want to connect to (press 1 if 127.0.0.1): ", end="")
     ip = input("")
+    if ip == "1": ip = "localhost"
     print()
 
-    print("Please enter the port number you'd like to connect from: ", end="")
+    print("Please enter the port number you'd like to connect from (press 1 for port 13377): ", end="")
     sport = int(input(""))
+    if sport == 1: sport = DEFAULT_SPORT
     print()
 
     print("Please enter the port number of the server you want to connect to: ", end="")
