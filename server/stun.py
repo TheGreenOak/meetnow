@@ -1,18 +1,17 @@
 from server import UDPServer
-import socket
+from json import dumps as serialize
 
-SERVER_PORT = 11111
+SERVER_PORT = 3478 # The STUN port - https://www.3cx.com/blog/voip-howto/stun-voip-1/
 
 class Stun(UDPServer):
     """
     The stun server is responsible for telling the user his ip.
-    In addition to the ip the server tells the user if his NAT is allowing P2P.
+    In the future in addition to the ip the server will tell the user if his NAT is allowing P2P.
     """
 
     def __init__(self, port):
         super().__init__(port)
 
-    
     def run(self):
         try:
             while True:
@@ -20,17 +19,15 @@ class Stun(UDPServer):
                     # In UDP, there are no sockets. Therefore, we just need to receive data.
                     data, address = self.recv()
                     print("[{}:{}] {}".format(address[0], address[1], data.decode()))
-                    ip_and_port = "IP: " + str(address[0]) + " Port: " + str(address[1])
-                    print(ip_and_port)
-                    ip_and_port = ip_and_port.encode()
-                    self.send(address, ip_and_port)
+                    ip = serialize({"ip": address[0]}).encode()
+                    self.send(address, ip)
                 except BlockingIOError:
                     pass
         except KeyboardInterrupt:
-            server.keep_running = False
+            self.keep_running = False
 
             print("\nStopping server...")
-            server.stop()
+            self.stop()
 
 
 def main():
@@ -39,9 +36,8 @@ def main():
     server.toggle_blocking_mode()
 
     print("STUN server started")
-    server.run()
     #server.run() # Blocking method - will continue running until the admin presses Ctrl+C
-    print("The user's ip is: " + str(ip) + ", the user's port is: " + str(port))
+    server.run()
 
     print("\nStopping server...")
     server.stop()
