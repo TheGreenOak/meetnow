@@ -276,6 +276,9 @@ class Signaling(TCPServer):
             second_user_index = 1 if self.users[meeting["participants"][0]] == user else 0
             second_user = self.users[meeting["participants"][second_user_index]]
 
+        # Remove the meeting from the database
+        del self.meetings[user["id"]]
+
         # Log the user out of the database
         if not user["created"]:
             del self.users[user_uuid]
@@ -302,9 +305,6 @@ class Signaling(TCPServer):
                 creator["created"] = False
             else:
                 del self.users[meeting["creator"]]
-
-        # Remove the meeting from the database
-        del self.meetings[user["id"]]
         
         return second_user_sock
     
