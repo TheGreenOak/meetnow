@@ -17,7 +17,7 @@ PASSWORD_LENGTH = 12
 MEETING_ID_LENGTH = 9
 MINUTE = 60
 
-SERVER_PORT = 888
+SERVER_PORT = 5060
 
 
 class InvalidRequest(Exception):
@@ -127,9 +127,8 @@ class Signaling(TCPServer):
         """
 
         # Check if the user is already in a meeting
-        if self.users.get(user_uuid):
-            if self.users[user_uuid].get("id"):
-                raise InMeeting
+        if self.users.get(user_uuid) and self.users[user_uuid].get("id"):
+            raise InMeeting
 
         # Check if the meeting exists
         if not self.meetings.get(meeting_id):
@@ -182,9 +181,8 @@ class Signaling(TCPServer):
         """
 
         # Check if the user is already in a meeting
-        if self.users.get(user_uuid):
-            if not self.users[user_uuid].get("id"):
-                raise NotInMeeting
+        if not self.users.get(user_uuid) or not self.users[user_uuid].get('id'):
+            raise NotInMeeting
 
         # Remove the user from the meeting
         user = self.users[user_uuid]
@@ -223,9 +221,8 @@ class Signaling(TCPServer):
         """
 
         # Check if the user is already in a meeting
-        if self.users.get(user_uuid):
-            if not self.users[user_uuid].get("id"):
-                raise NotInMeeting
+        if not self.users.get(user_uuid) or not self.users[user_uuid].get('id'):
+            raise NotInMeeting
         
         user = self.users[user_uuid]
         meeting = self.meetings[user["id"]]
@@ -262,9 +259,8 @@ class Signaling(TCPServer):
         """
 
         # Check if the user is already in a meeting
-        if self.users.get(user_uuid):
-            if not self.users[user_uuid].get("id"):
-                raise NotInMeeting
+        if not self.users.get(user_uuid) or not self.users[user_uuid].get('id'):
+            raise NotInMeeting
         
         user = self.users[user_uuid]
         second_user = None
@@ -279,17 +275,36 @@ class Signaling(TCPServer):
         if len(meeting["participants"]) == MAX_PARTICIPANTS:
             second_user_index = 1 if self.users[meeting["participants"][0]] == user else 0
             second_user = self.users[meeting["participants"][second_user_index]]
-        
-        # Remove the meeting from the database
-        del self.meetings[user["id"]]
 
         # Log the user out of the database
-        del self.users[user_uuid]
+        if not user["created"]:
+            del self.users[user_uuid]
+        else:
+            del user["id"]
+            del user["socket"]
+            del user["host"]
 
         # Log the second user out of the database
         if second_user:
             second_user_sock = [second_user["socket"]][:][0] # We do this mess to copy the socket by value
-            
+
+            if not second_user["created"]:
+                del self.users[meeting["participants"][second_user_index]]
+            else:
+                del second_user["id"]
+                del second_user["socket"]
+                del second_user["host"]
+
+        # Remove creator status
+        if self.users.get(meeting["creator"]):
+            creator = self.users[meeting["creator"]]
+            if creator.get("id"):
+                creator["created"] = False
+            else:
+                del self.users[meeting["creator"]]
+
+        # Remove the meeting from the database
+        del self.meetings[user["id"]]
         
         return second_user_sock
     
@@ -356,6 +371,8 @@ class Signaling(TCPServer):
             print("Client: {}:{}".format(address[0], address[1]))
             print("Message: {}".format(data.decode()))
             print(traceback.format_exc())
+
+            client.send(serialize({"response": "error", "reason": "An unknown error occurred"}).encode())
             
         finally:
             print("[DISCONNECTED] {}:{}".format(address[0], address[1]))
