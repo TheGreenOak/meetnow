@@ -1,6 +1,6 @@
 from server import TCPServer
+from threading import Thread, Event
 from json import loads as deserialize, dumps as serialize
-from threading import Thread
 from uuid import uuid4 as generate_uuid
 
 import secrets   # Cryptographically secure way to randomly choose
@@ -10,11 +10,12 @@ import traceback # Error reporting
 
 # Constants
 MAX_MESSAGE_LENGTH = 128
-MAX_MEETING_LENGTH = 5 # In minutes
+EMPTY_MEETING_EXPIRY = 5 # In minutes | Serves as TTL for the meeting
 MAX_PARTICIPANTS = 2
 
 PASSWORD_LENGTH = 12
 MEETING_ID_LENGTH = 9
+MINUTE = 60
 
 SERVER_PORT = 888
 
@@ -70,6 +71,7 @@ class Signaling(TCPServer):
         # Make two new databases for meetings and clients
         self.meetings = {}
         self.users = {}
+        self.expiry_stopper = Event()
     
 
     def create_meeting(self, user_uuid):
@@ -100,7 +102,7 @@ class Signaling(TCPServer):
             "password": password,
             "participants": [],
             "creator": user_uuid,
-            "expiration": MAX_MEETING_LENGTH
+            "expiration": EMPTY_MEETING_EXPIRY
         }
 
         # Log the meeting creator so that abuse can be prevented
@@ -145,6 +147,7 @@ class Signaling(TCPServer):
 
         # Add the user to the meeting
         meeting["participants"].append(user_uuid)
+        meeting["expiry"] = EMPTY_MEETING_EXPIRY
 
         # Log the user into the database
         if not self.users.get(user_uuid):
@@ -289,6 +292,39 @@ class Signaling(TCPServer):
             
         
         return second_user_sock
+    
+
+    def expiry_worker(self):
+        """
+        This method is responsible for checking the current meeting's TTL
+        every minute.
+
+        If a meeting is empty, the method will check if the TTL is 0. If yes,
+        the meeting will be deleted, and the user's "creator" flag will be set to False.
+        
+        If the TTL isn't 0, the method will deduct it by 1.
+        """
+        while not self.expiry_stopper.is_set():
+            count = 0
+
+            for id, meeting in self.meetings.copy().items():
+                if len(meeting["participants"]) == 0:
+                    if meeting["expiration"] <= 1: # The meeting has expired.
+                        del self.meetings[id]
+                        count += 1
+
+                        creator = self.users[meeting["creator"]]
+                        
+                        if creator.get("id"):
+                            creator["created"] = False
+                        else:
+                            del self.users[meeting["creator"]]
+                    else:
+                        meeting["expiration"] = meeting["expiration"] - 1
+
+            if count > 0:
+                print("[EXPIRY WORKER] Cleaned up {} meeting{}".format(count, 's' if count > 1 else ''))
+            self.expiry_stopper.wait(MINUTE) # We put this function to "sleep" that can be awoken
 
 
     def handle_client(self, client, address):
@@ -312,6 +348,8 @@ class Signaling(TCPServer):
                         sock.send(message.encode())
                 except BlockingIOError:
                     pass
+        except ConnectionError:
+            pass
         except:
             # An unknown error has occurred
             print("CRITICAL: An unknown error has occurred.")
@@ -390,7 +428,7 @@ class Signaling(TCPServer):
     
 
     def run(self):
-        clients = []
+        threads = []
 
         try:
             while True:
@@ -399,15 +437,21 @@ class Signaling(TCPServer):
                     print("[CONNECTED] {}:{}".format(address[0], address[1]))
 
                     # Make a new thread to handle the client, and store it in the list.
+                    expiry_worker = Thread(target=self.expiry_worker)
                     client_thread = Thread(target=self.handle_client, args=(client, address))
+
+                    expiry_worker.start()
                     client_thread.start()
-                    clients.append(client_thread)
+
+                    threads.append(expiry_worker)
+                    threads.append(client_thread)
                 except BlockingIOError:
                     pass
         except KeyboardInterrupt:
             self.keep_running = False
+            self.expiry_stopper.set()
 
-            for thread in clients:
+            for thread in threads:
                 thread.join()
 
 
