@@ -17,6 +17,9 @@ PASSWORD_LENGTH = 12
 MEETING_ID_LENGTH = 9
 MINUTE = 60
 
+SOCK_INDEX = 0
+MSG_INDEX = 1
+
 SERVER_PORT = 5060
 
 
@@ -80,7 +83,7 @@ class Signaling(TCPServer):
         If the user cannot do so, an exception will be raised.
 
         Parameters:
-        user_uuid (str): IP address or other unique identifier.
+        user_uuid (str): Address tuple or other unique identifier.
 
         Returns: 
         tuple: The ID of the meeting, and its password.
@@ -117,7 +120,7 @@ class Signaling(TCPServer):
         If the user cannot do so, an exception will be raised.
 
         Parameters:
-        user_uuid (str): IP address or other unique identifier.
+        user_uuid (str): Address tuple or other unique identifier.
         user_sock (socket): The socket of the user.
         meeting_id (str): The ID of the meeting.
         password (str): The password of the meeting.
@@ -174,7 +177,7 @@ class Signaling(TCPServer):
         If the user cannot do so, an exception will be raised.
 
         Parameters:
-        user_uuid (str): IP address or other unique identifier.
+        user_uuid (str): Address tuple or other unique identifier.
 
         Returns:
         socket | None: The remaining user's socket.
@@ -214,7 +217,7 @@ class Signaling(TCPServer):
         If the user cannot do so, an exception will be raised.
 
         Parameters:
-        user (str): IP address or other unique identifier.
+        user (str): Address tuple or other unique identifier.
 
         Returns:
         socket: The socket of the new host.
@@ -252,7 +255,7 @@ class Signaling(TCPServer):
         If the user cannot do so, an exception will be raised.
 
         Parameters:
-        user_uuid (str): IP address or other unique identifier.
+        user_uuid (str): Address tuple or other unique identifier.
 
         Returns:
         socket | none: The socket of the remaining participant.
@@ -341,6 +344,27 @@ class Signaling(TCPServer):
                 print("[EXPIRY WORKER] Cleaned up {} meeting{}".format(count, 's' if count > 1 else ''))
             self.expiry_stopper.wait(MINUTE) # We put this function to "sleep" that can be awoken
 
+    
+    def disconnect_client(self, user_uuid):
+        """
+        This method is responsible for removing a client from the database.
+
+        user_uuid (tuple): Address tuple or other unique identifier.
+
+        returns: tuple | None: The message that needs to be sent to the socket (both in tuple).
+        """
+        if not self.users.get(user_uuid):
+            return None
+        
+        user = self.users[user_uuid]
+        second_user = None
+
+        if user.get("id"):
+            second_user = self.leave_meeting(user_uuid)
+        
+        if second_user:
+            return (second_user, serialize({"response": "info", "type": "left"}))
+
 
     def handle_client(self, client, address):
         """
@@ -359,7 +383,7 @@ class Signaling(TCPServer):
                         break
 
                     # Forward the message to the handler, and send all the responses to the respective clients
-                    for sock, message in self.handle_message(address[0], client, data.decode()):
+                    for sock, message in self.handle_message(address, client, data.decode()):
                         sock.send(message.encode())
                 except BlockingIOError:
                     pass
@@ -378,14 +402,19 @@ class Signaling(TCPServer):
             print("[DISCONNECTED] {}:{}".format(address[0], address[1]))
             client.close()
 
+            # Clean up the database
+            update = self.disconnect_client(address)
+            if update:
+                update[SOCK_INDEX].send(update[MSG_INDEX].encode())
 
-    def handle_message(self, ip, sock, message):
+
+    def handle_message(self, addr, sock, message):
         """
         Handles all requests from the client.
         Returns the messages that need to be sent to each client after the request.
 
         Parameters:
-        ip (str): The client's IP
+        addr (tuple): The client's IP and port
         sock (socket): The client's socket
 
         Returns:
@@ -404,14 +433,14 @@ class Signaling(TCPServer):
                 raise InvalidRequest
             
             if request["request"] == "start":
-                id, password = self.create_meeting(ip)
+                id, password = self.create_meeting(addr)
                 responses.append((sock, serialize({"response": "success", "id": id, "password": password})))
             
             elif request["request"] == "join":
                 if not request.get("id") or not request.get("password"):
                     raise InvalidRequest
                 
-                other_client = self.join_meeting(ip, sock, request["id"], request["password"])
+                other_client = self.join_meeting(addr, sock, request["id"], request["password"])
                 if other_client:
                     responses.append((sock, serialize({"response": "success", "host": False})))
                     responses.append((other_client, serialize({"response": "info", "type": "joined"})))
@@ -419,18 +448,18 @@ class Signaling(TCPServer):
                     responses.append((sock, serialize({"response": "success", "host": True})))
             
             elif request["request"] == "switch":
-                new_host = self.switch_host(ip)
+                new_host = self.switch_host(addr)
                 responses.append((sock, serialize({"response": "success"})))
                 responses.append((new_host, serialize({"response": "info", "type": "switched"})))
             
             elif request["request"] == "leave":
-                remaining_user = self.leave_meeting(ip)
+                remaining_user = self.leave_meeting(addr)
                 responses.append((sock, serialize({"response": "success"})))
                 if remaining_user:
                     responses.append((remaining_user, serialize({"response": "info", "type": "left"})))
 
             elif request["request"] == "end":
-                remaining_user = self.end_meeting(ip)
+                remaining_user = self.end_meeting(addr)
                 responses.append((sock, serialize({"response": "success"})))
                 if remaining_user:
                     responses.append((remaining_user, serialize({"response": "info", "type": "ended"})))
