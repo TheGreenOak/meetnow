@@ -13,7 +13,7 @@ MAX_MESSAGE_LENGTH = 128
 MAX_PARTICIPANTS = 2
 
 EMPTY_MEETING_EXPIRY = 5 # In minutes | Serves as TTL for the meeting
-USER_TTL = 2             # In minutes | User's socket will be disconnected according to the TTL
+USER_TTL_MESSAGES = 1    # How many heartbeats to send before logging out the user
 
 PASSWORD_LENGTH = 12
 MEETING_ID_LENGTH = 9
@@ -371,7 +371,8 @@ class Signaling(TCPServer):
 
             for user_uuid, user in self.users.copy().items():
                 if user["ttl"] <= 0: # The user has probably disconnected
-                    self.disconnect_client(user_uuid)
+                    self.users[user_uuid]["socket"].shutdown(1) # TODO: Properly disconnect user
+                    counter += 1
                 else:
                     user["ttl"] = user["ttl"] - 1
                     user["socket"].send("HEARTBEAT".encode())
@@ -443,6 +444,11 @@ class Signaling(TCPServer):
         responses = []
 
         try:
+            self.users[addr]["ttl"] = USER_TTL_MESSAGES # If we received a message from the user, they're alive.
+
+            if message == "HEARTBEAT":
+                return [] # No need to return a message
+
             try:
                 request = deserialize(message)
             except:
@@ -499,17 +505,17 @@ class Signaling(TCPServer):
             while True:
                 try:
                     client, address = self.accept()
-                    self.users[address] = {"ttl": USER_TTL, "socket": client}
+                    self.users[address] = {"ttl": USER_TTL_MESSAGES, "socket": client}
                     print("[CONNECTED] {}:{}".format(address[0], address[1]))
 
-                    # Make a new thread to handle the client, and store it in the list.
-                    expiry_worker = Thread(target=self.expiry_worker)
-                    client_thread = Thread(target=self.handle_client, args=(client, address))
+                    # Make new threads to handle clients and expiration cleaners
+                    expiry_workers = [Thread(target=self.meeting_cleaner), Thread(target=self.user_cleaner)]
+                    client_thread = Thread(target=self.handle_client, args=(client, address)) # TODO: make this single-threaded
 
-                    expiry_worker.start()
+                    for worker in expiry_workers: worker.start()
                     client_thread.start()
 
-                    threads.append(expiry_worker)
+                    threads.extend(expiry_workers)
                     threads.append(client_thread)
                 except BlockingIOError:
                     pass
