@@ -10,8 +10,10 @@ import traceback # Error reporting
 
 # Constants
 MAX_MESSAGE_LENGTH = 128
-EMPTY_MEETING_EXPIRY = 5 # In minutes | Serves as TTL for the meeting
 MAX_PARTICIPANTS = 2
+
+EMPTY_MEETING_EXPIRY = 5 # In minutes | Serves as TTL for the meeting
+USER_TTL = 2             # In minutes | User's socket will be disconnected according to the TTL
 
 PASSWORD_LENGTH = 12
 MEETING_ID_LENGTH = 9
@@ -74,6 +76,7 @@ class Signaling(TCPServer):
         # Make two new databases for meetings and clients
         self.meetings = {}
         self.users = {}
+
         self.expiry_stopper = Event()
     
 
@@ -90,11 +93,10 @@ class Signaling(TCPServer):
         """
 
         # Check if the user is already in a meeting, or if they are already created one
-        if self.users.get(user_uuid):
-            if self.users[user_uuid]["created"]:
-                raise AlreadyCreated
-            else:
-                raise InMeeting
+        if self.users[user_uuid].get("created") and self.users[user_uuid]["created"] == True:
+            raise AlreadyCreated
+        elif self.users[user_uuid].get("id"):
+            raise InMeeting
 
         # Create the new meeting details
         meeting_id = str(generate_uuid().int)[:MEETING_ID_LENGTH]
@@ -109,7 +111,7 @@ class Signaling(TCPServer):
         }
 
         # Log the meeting creator so that abuse can be prevented
-        self.users[user_uuid] = { "created": True }
+        self.users[user_uuid]["created"] = True
 
         return (meeting_id, password)
 
@@ -130,7 +132,7 @@ class Signaling(TCPServer):
         """
 
         # Check if the user is already in a meeting
-        if self.users.get(user_uuid) and self.users[user_uuid].get("id"):
+        if self.users[user_uuid].get("id"):
             raise InMeeting
 
         # Check if the meeting exists
@@ -150,16 +152,12 @@ class Signaling(TCPServer):
         # Add the user to the meeting
         meeting["participants"].append(user_uuid)
         meeting["expiry"] = EMPTY_MEETING_EXPIRY
-
-        # Log the user into the database
-        if not self.users.get(user_uuid):
-            self.users[user_uuid] = { "created": False }
         
+        # Setup access variables
         user = self.users[user_uuid]
         other_user = None
 
         user["id"] = meeting_id
-        user["socket"] = user_sock
         
         # Check if user deserves host privileges
         if len(meeting["participants"]) == 1:
@@ -184,23 +182,19 @@ class Signaling(TCPServer):
         """
 
         # Check if the user is already in a meeting
-        if not self.users.get(user_uuid) or not self.users[user_uuid].get('id'):
+        if not self.users[user_uuid].get('id'):
             raise NotInMeeting
 
         # Remove the user from the meeting
         user = self.users[user_uuid]
-        remaining_user_sock = None
         meeting = self.meetings[user["id"]]
+        remaining_user_sock = None
 
         meeting["participants"].remove(user_uuid)
 
-        # Log the user out of the database
-        if not user["created"]:
-            del self.users[user_uuid]
-        else:
-            del user["id"]
-            del user["socket"]
-            del user["host"]
+        # Log the user out of the meeting
+        del user["id"]
+        del user["host"]
 
         # Check if another user is still in the meeting
         if len(meeting["participants"]) == 1:
@@ -224,7 +218,7 @@ class Signaling(TCPServer):
         """
 
         # Check if the user is already in a meeting
-        if not self.users.get(user_uuid) or not self.users[user_uuid].get('id'):
+        if not self.users[user_uuid].get('id'):
             raise NotInMeeting
         
         user = self.users[user_uuid]
@@ -262,13 +256,14 @@ class Signaling(TCPServer):
         """
 
         # Check if the user is already in a meeting
-        if not self.users.get(user_uuid) or not self.users[user_uuid].get('id'):
+        if not self.users[user_uuid].get('id'):
             raise NotInMeeting
         
         user = self.users[user_uuid]
+        meeting = self.meetings[user["id"]]
+
         second_user = None
         second_user_sock = None
-        meeting = self.meetings[user["id"]]
 
         # Check if the user is the host
         if not user["host"]:
@@ -282,69 +277,27 @@ class Signaling(TCPServer):
         # Remove the meeting from the database
         del self.meetings[user["id"]]
 
-        # Log the user out of the database
-        if not user["created"]:
-            del self.users[user_uuid]
-        else:
-            del user["id"]
-            del user["socket"]
-            del user["host"]
+        # Log the user out of the meeting
+        del user["id"]
+        del user["host"]
 
-        # Log the second user out of the database
+        # Log the second user out of the meeting
         if second_user:
             second_user_sock = [second_user["socket"]][:][0] # We do this mess to copy the socket by value
 
-            if not second_user["created"]:
-                del self.users[meeting["participants"][second_user_index]]
-            else:
-                del second_user["id"]
-                del second_user["socket"]
-                del second_user["host"]
+            del second_user["id"]
+            del second_user["host"]
 
         # Remove creator status
-        if self.users.get(meeting["creator"]):
-            creator = self.users[meeting["creator"]]
-            if creator.get("id"):
-                creator["created"] = False
-            else:
-                del self.users[meeting["creator"]]
+        creator = self.users[meeting["creator"]]
+        if creator.get("id"):
+            creator["created"] = False
+        else:
+            del creator["created"]
         
         return second_user_sock
     
 
-    def expiry_worker(self):
-        """
-        This method is responsible for checking the current meeting's TTL
-        every minute.
-
-        If a meeting is empty, the method will check if the TTL is 0. If yes,
-        the meeting will be deleted, and the user's "creator" flag will be set to False.
-        
-        If the TTL isn't 0, the method will deduct it by 1.
-        """
-        while not self.expiry_stopper.is_set():
-            count = 0
-
-            for id, meeting in self.meetings.copy().items():
-                if len(meeting["participants"]) == 0:
-                    if meeting["expiration"] <= 1: # The meeting has expired.
-                        del self.meetings[id]
-                        count += 1
-
-                        creator = self.users[meeting["creator"]]
-                        
-                        if creator.get("id"):
-                            creator["created"] = False
-                        else:
-                            del self.users[meeting["creator"]]
-                    else:
-                        meeting["expiration"] = meeting["expiration"] - 1
-
-            if count > 0:
-                print("[EXPIRY WORKER] Cleaned up {} meeting{}".format(count, 's' if count > 1 else ''))
-            self.expiry_stopper.wait(MINUTE) # We put this function to "sleep" that can be awoken
-
-    
     def disconnect_client(self, user_uuid):
         """
         This method is responsible for removing a client from the database.
@@ -353,9 +306,7 @@ class Signaling(TCPServer):
 
         returns: tuple | None: The message that needs to be sent to the socket (both in tuple).
         """
-        if not self.users.get(user_uuid):
-            return None
-        
+
         user = self.users[user_uuid]
         second_user = None
 
@@ -366,6 +317,71 @@ class Signaling(TCPServer):
             return (second_user, serialize({"response": "info", "type": "left"}))
 
 
+    def meeting_cleaner(self):
+        """
+        This method is responsible for checking the meeting's TTL every minute.
+
+        If a meeting is empty, the method will check if the TTL is 0. If yes,
+        the meeting will be deleted, and the user's "creator" flag will be set to False.
+        
+        If the TTL isn't 0, the method will deduct it by 1.
+        """
+        
+        # We want to run this worker until the server stops, at which point
+        # this event will get set.
+        while not self.expiry_stopper.is_set():
+            counter = 0
+
+            for id, meeting in self.meetings.copy().items():
+                if len(meeting["participants"]) == 0:
+                    if meeting["expiration"] <= 1: # The meeting has expired.
+                        del self.meetings[id]
+                        counter += 1
+
+                        # Get the creator
+                        creator = self.users[meeting["creator"]]
+                        
+                        # Remove the user's creation status
+                        if creator.get("id"):
+                            creator["created"] = False
+                        else:
+                            del creator["created"]
+                    else:
+                        # If the meeting hasn't expired, and it's empty, deduct the TTL.
+                        meeting["expiration"] = meeting["expiration"] - 1
+
+            if counter > 0:
+                print("[EXPIRY WORKER] Cleaned up {} meeting{}".format(counter, 's' if counter > 1 else ''))
+
+            self.expiry_stopper.wait(MINUTE) # We put this function to "sleep" that can be awoken
+    
+
+    def user_cleaner(self):
+        """
+        This method is responsible for checking the user's TTL, and will send a heartbeat every minute.
+        If the user's TTL is 0, they will be disconnected.
+
+        Works similary to meeting_cleaner.
+        """
+
+        # We want to run this worker until the server stops, at which point
+        # this event will get set.
+        while not self.expiry_stopper.is_set():
+            counter = 0
+
+            for user_uuid, user in self.users.copy().items():
+                if user["ttl"] <= 0: # The user has probably disconnected
+                    self.disconnect_client(user_uuid)
+                else:
+                    user["ttl"] = user["ttl"] - 1
+                    user["socket"].send("HEARTBEAT".encode())
+
+            if counter > 0:
+                print("[EXPIRY WORKER] Disconnected {} client{}".format(counter, 's' if counter > 1 else ''))
+
+            self.expiry_stopper.wait(MINUTE) # We put this function to "sleep" that can be awoken
+
+
     def handle_client(self, client, address):
         """
         A thread for handling a Signaling client.
@@ -374,6 +390,7 @@ class Signaling(TCPServer):
         client (socket): The client's socket.
         address (tuple): The client's address.
         """
+
         try:
             # We want to run until the server is forcefully shut down
             while self.keep_running:
@@ -406,6 +423,8 @@ class Signaling(TCPServer):
             update = self.disconnect_client(address)
             if update:
                 update[SOCK_INDEX].send(update[MSG_INDEX].encode())
+            
+            del self.users[address]
 
 
     def handle_message(self, addr, sock, message):
@@ -480,6 +499,7 @@ class Signaling(TCPServer):
             while True:
                 try:
                     client, address = self.accept()
+                    self.users[address] = {"ttl": USER_TTL, "socket": client}
                     print("[CONNECTED] {}:{}".format(address[0], address[1]))
 
                     # Make a new thread to handle the client, and store it in the list.
