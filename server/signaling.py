@@ -13,7 +13,7 @@ MAX_MESSAGE_LENGTH = 128
 MAX_PARTICIPANTS = 2
 
 EMPTY_MEETING_EXPIRY = 5 # In minutes | Serves as TTL for the meeting
-USER_TTL_MESSAGES = 1    # How many heartbeats to send before logging out the user
+USER_TTL_MESSAGES = 2    # How many heartbeats to send before logging out the user
 
 PASSWORD_LENGTH = 12
 MEETING_ID_LENGTH = 9
@@ -116,7 +116,7 @@ class Signaling(TCPServer):
         return (meeting_id, password)
 
 
-    def join_meeting(self, user_uuid, user_sock, meeting_id, password):
+    def join_meeting(self, user_uuid, meeting_id, password):
         """
         Attempts to join a meeting.
         If the user cannot do so, an exception will be raised.
@@ -298,21 +298,34 @@ class Signaling(TCPServer):
         return second_user_sock
     
 
-    def disconnect_client(self, user_uuid):
+    def disconnect_client(self, address):
         """
-        This method is responsible for removing a client from the database.
+        This method is responsible for removing a client from the database, and disconnecting their socket.
 
-        user_uuid (tuple): Address tuple or other unique identifier.
+        No checks are performed to ensure that the client is in the database.
+        Call this method only after checking that the client is in the database.
+
+        address (tuple): Address tuple or other unique identifier.
 
         returns: tuple | None: The message that needs to be sent to the socket (both in tuple).
         """
 
-        user = self.users[user_uuid]
+        # Setup temporary variables
+        user = self.users[address]
+        client = user["socket"]
         second_user = None
 
+        # If the user disconnects in a meeting, remove them from the meeting
         if user.get("id"):
-            second_user = self.leave_meeting(user_uuid)
+            second_user = self.leave_meeting(address)
         
+        del self.users[address]
+        
+        # Disconnect the socket
+        client.shutdown(1)
+        client.close()
+        print("[DISCONNECTED] {}:{}".format(address[0], address[1]))
+
         if second_user:
             return (second_user, serialize({"response": "info", "type": "left"}))
 
@@ -339,13 +352,14 @@ class Signaling(TCPServer):
                         counter += 1
 
                         # Get the creator
-                        creator = self.users[meeting["creator"]]
-                        
-                        # Remove the user's creation status
-                        if creator.get("id"):
-                            creator["created"] = False
-                        else:
-                            del creator["created"]
+                        if self.users.get(meeting["creator"]) and self.users[meeting["creator"]].get("created"):
+                            creator = self.users[meeting["creator"]]
+                            
+                            # Remove the user's creation status
+                            if creator.get("id"):
+                                creator["created"] = False
+                            else:
+                                del creator["created"]
                     else:
                         # If the meeting hasn't expired, and it's empty, deduct the TTL.
                         meeting["expiration"] = meeting["expiration"] - 1
@@ -371,11 +385,11 @@ class Signaling(TCPServer):
 
             for user_uuid, user in self.users.copy().items():
                 if user["ttl"] <= 0: # The user has probably disconnected
-                    self.users[user_uuid]["socket"].shutdown(1) # TODO: Properly disconnect user
+                    self.disconnect_client(user_uuid)
                     counter += 1
                 else:
                     user["ttl"] = user["ttl"] - 1
-                    user["socket"].send("HEARTBEAT".encode())
+                    user["socket"].send(b"HEARTBEAT")
 
             if counter > 0:
                 print("[EXPIRY WORKER] Disconnected {} client{}".format(counter, 's' if counter > 1 else ''))
@@ -405,7 +419,7 @@ class Signaling(TCPServer):
                         sock.send(message.encode())
                 except BlockingIOError:
                     pass
-        except ConnectionError:
+        except (ConnectionError, OSError):
             pass
         except:
             # An unknown error has occurred
@@ -417,15 +431,8 @@ class Signaling(TCPServer):
             client.send(serialize({"response": "error", "reason": "An unknown error occurred"}).encode())
             
         finally:
-            print("[DISCONNECTED] {}:{}".format(address[0], address[1]))
-            client.close()
-
-            # Clean up the database
-            update = self.disconnect_client(address)
-            if update:
-                update[SOCK_INDEX].send(update[MSG_INDEX].encode())
-            
-            del self.users[address]
+            if self.users.get(address):
+                self.disconnect_client(address)
 
 
     def handle_message(self, addr, sock, message):
@@ -465,7 +472,7 @@ class Signaling(TCPServer):
                 if not request.get("id") or not request.get("password"):
                     raise InvalidRequest
                 
-                other_client = self.join_meeting(addr, sock, request["id"], request["password"])
+                other_client = self.join_meeting(addr, request["id"], request["password"])
                 if other_client:
                     responses.append((sock, serialize({"response": "success", "host": False})))
                     responses.append((other_client, serialize({"response": "info", "type": "joined"})))
@@ -502,20 +509,22 @@ class Signaling(TCPServer):
         threads = []
 
         try:
+            # Create expiration worker threads
+            expiry_workers = [Thread(target=self.meeting_cleaner), Thread(target=self.user_cleaner)]
+            for worker in expiry_workers:
+                worker.start()
+                threads.append(worker)
+
+            # Accept new clients and handle them
             while True:
                 try:
                     client, address = self.accept()
                     self.users[address] = {"ttl": USER_TTL_MESSAGES, "socket": client}
                     print("[CONNECTED] {}:{}".format(address[0], address[1]))
 
-                    # Make new threads to handle clients and expiration cleaners
-                    expiry_workers = [Thread(target=self.meeting_cleaner), Thread(target=self.user_cleaner)]
+                    # Make a new thread to handle the client
                     client_thread = Thread(target=self.handle_client, args=(client, address)) # TODO: make this single-threaded
-
-                    for worker in expiry_workers: worker.start()
                     client_thread.start()
-
-                    threads.extend(expiry_workers)
                     threads.append(client_thread)
                 except BlockingIOError:
                     pass
