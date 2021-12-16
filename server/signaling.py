@@ -6,6 +6,7 @@ from uuid import uuid4 as generate_uuid
 import secrets   # Cryptographically secure way to randomly choose
 import string    # For easy access to ASCII characters
 import traceback # Error reporting
+import socket    # Socket logic
 
 
 # Constants
@@ -322,7 +323,7 @@ class Signaling(TCPServer):
         del self.users[address]
         
         # Disconnect the socket
-        client.shutdown(1)
+        client.shutdown(socket.SHUT_RDWR)
         client.close()
         print("[DISCONNECTED] {}:{}".format(address[0], address[1]))
 
