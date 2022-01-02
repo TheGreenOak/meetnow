@@ -2,6 +2,7 @@ from server import TCPServer
 from threading import Thread, Event
 from json import loads as deserialize, dumps as serialize
 from uuid import uuid4 as generate_uuid
+from database.redisdb import RedisDictDB
 
 import secrets   # Cryptographically secure way to randomly choose
 import string    # For easy access to ASCII characters
@@ -71,12 +72,15 @@ class Signaling(TCPServer):
     and does not care what happens to the clients beyond connecting them.
     """
     
-    def __init__(self, port):
+    def __init__(self, port, public_db):
         super().__init__(port)
 
         # Make two new databases for meetings and clients
         self.meetings = {}
         self.users = {}
+
+        # Get the public database
+        self.public_db = public_db
 
         self.expiry_stopper = Event()
     
@@ -110,6 +114,9 @@ class Signaling(TCPServer):
             "creator": user_uuid,
             "expiration": EMPTY_MEETING_EXPIRY
         }
+
+        # Store the meeting in the public database
+        self.store_meeting(meeting_id, self.meetings[meeting_id])
 
         # Log the meeting creator so that abuse can be prevented
         self.users[user_uuid]["created"] = True
@@ -153,6 +160,9 @@ class Signaling(TCPServer):
         # Add the user to the meeting
         meeting["participants"].append(user_uuid)
         meeting["expiry"] = EMPTY_MEETING_EXPIRY
+
+        # Add the user to the public database
+        self.store_meeting(meeting_id, meeting)
         
         # Setup access variables
         user = self.users[user_uuid]
@@ -191,7 +201,9 @@ class Signaling(TCPServer):
         meeting = self.meetings[user["id"]]
         remaining_user_sock = None
 
+        # Update the meeting and the public database
         meeting["participants"].remove(user_uuid)
+        self.store_meeting(user["id"], meeting)
 
         # Log the user out of the meeting
         del user["id"]
@@ -277,6 +289,7 @@ class Signaling(TCPServer):
 
         # Remove the meeting from the database
         del self.meetings[user["id"]]
+        del self.public_db[user["id"]]
 
         # Log the user out of the meeting
         del user["id"]
@@ -506,6 +519,22 @@ class Signaling(TCPServer):
         return responses
     
 
+    def store_meeting(self, id, meeting):
+        """
+        Stores the meeting in the public database,
+        discarding any information that doesn't need to be public.
+
+        Parameters:
+        id (str): The meeting ID.
+        meeting (dict): The meeting to store.
+        """
+
+        self.public_db[id] = {
+            "password": meeting["password"],
+            "participants": str(meeting["participants"])
+        }
+    
+
     def run(self):
         threads = []
 
@@ -538,7 +567,11 @@ class Signaling(TCPServer):
 
 
 def main():
-    server = Signaling(SERVER_PORT)
+    # Connect to the public database
+    public_db = RedisDictDB("meetings")
+
+    # Start the server
+    server = Signaling(SERVER_PORT, public_db)
     server.start()
     server.toggle_blocking_mode()
 
