@@ -72,7 +72,7 @@ class Signaling(TCPServer):
     and does not care what happens to the clients beyond connecting them.
     """
     
-    def __init__(self, port, public_db):
+    def __init__(self, port, public_db=None):
         super().__init__(port)
 
         # Make two new databases for meetings and clients
@@ -529,10 +529,11 @@ class Signaling(TCPServer):
         meeting (dict): The meeting to store.
         """
 
-        self.public_db[id] = {
-            "password": meeting["password"],
-            "participants": str(meeting["participants"])
-        }
+        if self.public_db:
+            self.public_db[id] = {
+                "password": meeting["password"],
+                "participants": str(meeting["participants"])
+            }
     
 
     def run(self):
@@ -568,7 +569,12 @@ class Signaling(TCPServer):
 
 def main():
     # Connect to the public database
-    public_db = RedisDictDB("meetings")
+    try:
+        public_db = RedisDictDB("meetings")
+    except RuntimeError:
+        public_db = None
+        print("Couldn't connect to the Redis Database.")
+        print("Public functionality with other servers will not work properly.")
 
     # Start the server
     server = Signaling(SERVER_PORT, public_db)

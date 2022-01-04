@@ -4,7 +4,11 @@ import redis
 class RedisDictDB:
     def __init__(self, prefix=None):
         self.prefix = prefix
-        self.db = redis.Redis(decode_responses=True)
+
+        try:
+            self.db = redis.Redis(decode_responses=True)
+        except redis.ConnectionError:
+            raise RuntimeError("Could not connect to Redis server")
     
 
     def __getitem__(self, key):
