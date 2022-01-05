@@ -7,6 +7,7 @@ class RedisDictDB:
 
         try:
             self.db = redis.Redis(decode_responses=True)
+            self.db.ping()
         except redis.ConnectionError:
             raise RuntimeError("Could not connect to Redis server")
     
