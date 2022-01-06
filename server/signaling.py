@@ -65,11 +65,38 @@ class InsufficientPermissions(Exception):
 
 class Signaling(TCPServer):
     """
+    [ SERVER INFORMATION ]
     The Signaling server is responsible for creating and assigning ID's to meetings.
     The server will be based on our basic TCP server.
 
     The point of it is to connect clients together. It does not have any other responsibilities,
     and does not care what happens to the clients beyond connecting them.
+
+    [ DATABASE INFORMATION ]
+    The signaling server maintains two internal databases, and has read/write responsibility for a public one.
+    The two internal databases are used mainly for checking the requests' validity.
+
+    [self.meetings]
+    "id": {
+        password: str,
+        creator: (ip, port),
+        expiration: int (ttl),
+        participants: [(ip, port), (ip, port)]
+    }
+
+    [self.users]
+    (ip, port): {
+        socket: socket object,
+        ttl: int,
+        id: str [optional],
+        host: bool [optional]
+    }
+
+    [self.public_id]
+    "id": {
+        password: str,
+        participants: [ip, ip]
+    }
     """
     
     def __init__(self, port, public_db=None):
@@ -529,14 +556,19 @@ class Signaling(TCPServer):
         meeting (dict): The meeting to store.
         """
 
+        # We only need to store the users' IP's. We do not care about their ports.
+        participants = [participant[0] for participant in meeting["participants"]]
+
+        # First, check if there is a public database available
         if self.public_db:
             self.public_db[id] = {
                 "password": meeting["password"],
-                "participants": str(meeting["participants"])
+                "participants": serialize(participants) # Serialization is needed due to Redis' limitations.
             }
     
 
     def run(self):
+        # We make a thread list in order to make sure we don't kill the program with running threads
         threads = []
 
         try:
@@ -550,7 +582,7 @@ class Signaling(TCPServer):
             while True:
                 try:
                     client, address = self.accept()
-                    self.users[address] = {"ttl": USER_TTL_MESSAGES, "socket": client}
+                    self.users[address] = {"ttl": USER_TTL_MESSAGES, "socket": client} # Insert the user to the database
                     print("[CONNECTED] {}:{}".format(address[0], address[1]))
 
                     # Make a new thread to handle the client
@@ -563,6 +595,7 @@ class Signaling(TCPServer):
             self.keep_running = False
             self.expiry_stopper.set()
 
+            # Safely wait for all threads to end
             for thread in threads:
                 thread.join()
 
@@ -586,6 +619,9 @@ def main():
 
     print("\nStopping server...")
     server.stop()
+
+    # Flush the database
+    del public_db
 
 
 if __name__ == "__main__":

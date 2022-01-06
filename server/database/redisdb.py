@@ -32,6 +32,13 @@ class RedisDictDB:
 
     def __delitem__(self, key):
         """
-        Implementation for the del operator.
+        Implementation for the del [] operator.
         """
         self.db.delete(f"{self.prefix if self.prefix else ''}{':' if self.prefix else ''}{key}")
+    
+
+    def __del__(self):
+        """
+        Implementation for the del operator.
+        """
+        self.db.flushall()
