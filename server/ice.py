@@ -141,7 +141,7 @@ class ICE(TCPServer):
         # If another user is waiting
         if self.connections.get(meeting_id):
             self.connections[meeting_id].append(user_uuid)
-            other_user = self.connections[meeting_id][0]
+            other_user = self.users[self.connections[meeting_id][0]]["socket"]
         else:
             self.connections[meeting_id] = [user_uuid]
         
@@ -183,7 +183,7 @@ class ICE(TCPServer):
         connection = self.connections[user["id"]]
 
         # Determine the peer
-        user_index = connection.index(user)
+        user_index = connection.index(user_uuid)
         peer = connection[user_index ^ 1] # XOR shortcut
 
         # Return the peer's socket
@@ -220,7 +220,7 @@ class ICE(TCPServer):
         # Determine if we have another peer
         if len(connection) > 1:
             user_index = connection.index(user_uuid)
-            other_user = connection[user_index ^ 1] # XOR shortcut
+            other_user = self.users[connection[user_index ^ 1]]["socket"] # XOR shortcut
         
         # Remove the user from the connection
         connection.remove(user_uuid)
@@ -370,7 +370,7 @@ class ICE(TCPServer):
                     responses.append((sock, serialize({"response": "success", "waiting": False})))
                     responses.append((other_peer, serialize({"response": "info", "type": "connected"})))
                 else:
-                    responses.append((sock, serialize({"response": "success", "waiting": False})))
+                    responses.append((sock, serialize({"response": "success", "waiting": True})))
             
             elif request["request"] == "send":
                 if not request.get("message"):
@@ -378,7 +378,7 @@ class ICE(TCPServer):
                 
                 peer = self.get_peer(addr)
                 responses.append((sock, serialize({"response": "success", "message": "Sent your message"})))
-                responses.append((peer, serialize({"response": "message", "content": message})))
+                responses.append((peer, serialize({"response": "message", "content": request["message"]})))
 
             elif request["request"] == "disconnect":
                 other_peer = self.disconnect_peer(addr)
@@ -438,7 +438,7 @@ def main():
     server.start()
     server.toggle_blocking_mode()
     
-    print("Signaling server started")
+    print("ICE server started")
     server.run() # Blocking method - will continue running until the admin presses Ctrl+C
 
     print("\nStopping server...")
