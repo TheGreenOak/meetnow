@@ -163,7 +163,7 @@ class ICE(TCPServer):
 
         # Get the user
         user = self.users[user_uuid]
-        user_index = 0
+        user_index = None
         
         connection = None
         peer = None
@@ -188,73 +188,51 @@ class ICE(TCPServer):
 
         # Return the peer's socket
         return self.users[peer]["socket"]
-
-    """
-    ICE Server User Commands
-    [REQUEST]
-
-    connect:
-    requires(ID[str], Password[str]);
-
-    send:
-    requires(Message[str]);
-
-    disconnect:
-    requires(None)
-
-
-    [RESPONSE]
-    connected:
-    params(waiting)
-    ["response": "success", "waiting": {bool}]
-
-    error:
-    params(reason)
-    ["response": "error", "reason": {str}]
-
-    info:
-    connected
-    ["response": "info", "type": "connected"]
-
-    message
-    ["response": "message", "content": [ICE Protocol]]
-    """
-
-    """
-    ICE User Control Protocol
-
-    [P2P Exchange]
-    IP[IP Address]
-    PORT[Port Number]
     
-    ACCEPT
-    REJECT
 
-    [NO P2P Exchange]
-    TURN
+    def disconnect_peer(self, user_uuid):
+        """
+        This method is responsible for disconnecting a user from another user.
 
-    ACCEPT
-    REJECT
+        Parameters:
+        user_uuid (any): Tuple address or other unique identifier.
 
-    [Call Demo] [Data is binary]
-    A: IP10.0.0.127
-    B: ACCEPT
-    B: IP10.0.0.172
-    A: ACCEPT
+        Returns:
+        socket | None: The other user's socket.
+        """
+        
+        # Get the user
+        user = self.users[user_uuid]
+        user_index = None
 
-    A: PORT2833
-    B: ACCEPT
-    B: PORT9283
-    A: ACCEPT/REJECT
-    B: PORT2332
-    A: ACCEPT
+        connection = None
+        other_user = None
 
-    // -- //
-    A: IP10.0.0.127
-    B: TURN
-    A: ACCEPT/REJECT
+        # Check if the user is connected
+        if not user.get("id"):
+            raise NotConnected
+        
+        # -- The user can disconnect -- #
 
-    """
+        # Get the connection
+        connection = self.connections[user["id"]]
+
+        # Determine if we have another peer
+        if len(connection) > 1:
+            user_index = connection.index(user_uuid)
+            other_user = connection[user_index ^ 1] # XOR shortcut
+        
+        # Remove the user from the connection
+        connection.remove(user_uuid)
+
+        # If there's no other peer, remove the connection
+        if not other_user:
+            del self.connections[user["id"]]
+        
+        # Mark the user as disconnected
+        del user["id"]
+
+        return other_user
 
 
     def disconnect_client(self, address):
@@ -276,7 +254,7 @@ class ICE(TCPServer):
 
         # If the user disconnects in a meeting, remove them from the meeting
         if user.get("id"):
-            second_user = self.leave_meeting(address)
+            second_user = self.disconnect_peer(address)
         
         del self.users[address]
         
@@ -387,10 +365,10 @@ class ICE(TCPServer):
                 if not request.get("id") or not request.get("password"):
                     raise InvalidRequest
                 
-                other_client = self.connect_peer(addr, request["id"], request["password"])
-                if other_client:
+                other_peer = self.connect_peer(addr, request["id"], request["password"])
+                if other_peer:
                     responses.append((sock, serialize({"response": "success", "waiting": False})))
-                    responses.append((other_client, serialize({"response": "info", "type": "connected"})))
+                    responses.append((other_peer, serialize({"response": "info", "type": "connected"})))
                 else:
                     responses.append((sock, serialize({"response": "success", "waiting": False})))
             
@@ -399,14 +377,14 @@ class ICE(TCPServer):
                     raise InvalidRequest
                 
                 peer = self.get_peer(addr)
-                responses.append((sock, serialize({"response": "success", "message": "Sent your message!"})))
+                responses.append((sock, serialize({"response": "success", "message": "Sent your message"})))
                 responses.append((peer, serialize({"response": "message", "content": message})))
 
             elif request["request"] == "disconnect":
-                remaining_user = self.disconnect_peer(addr)
+                other_peer = self.disconnect_peer(addr)
                 responses.append((sock, serialize({"response": "success"})))
-                if remaining_user:
-                    responses.append((remaining_user, serialize({"response": "info", "type": "disconnected"})))
+                if other_peer:
+                    responses.append((other_peer, serialize({"response": "info", "type": "disconnected"})))
 
             else:
                 raise InvalidRequest
