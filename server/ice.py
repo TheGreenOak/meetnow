@@ -29,6 +29,10 @@ class AlreadyPaired(Exception):
     reason = "You already have a connected peer"
 
 
+class NotConnected(Exception):
+    reason = "You're not connected"
+
+
 class MeetingFull(Exception):
     reason = "This meeting is full"
 
@@ -102,7 +106,6 @@ class ICE(TCPServer):
         # Get the user
         user = self.users[user_uuid]
         other_user = None
-        connection = None
 
         # If the user is already connected, they will receive an error.
         # We just want to see which error they should receive.
@@ -146,6 +149,45 @@ class ICE(TCPServer):
         user["id"] = meeting_id
 
         return other_user
+    
+    def get_peer(self, user_uuid):
+        """
+        This method is responsible for getting a user's peer
+
+        Parameters:
+        user_uuid (any): Tuple address or other unique identifier.
+
+        Returns:
+        socket: The peer's socket
+        """
+
+        # Get the user
+        user = self.users[user_uuid]
+        user_index = 0
+        
+        connection = None
+        peer = None
+        
+        # Check if the user is connected
+        if not user.get("id"):
+            raise NotConnected
+        
+        # Check if the user is waiting for a peer
+        if len(self.connections[user["id"]]) == 1:
+            raise WaitingForPeer
+        
+
+        # -- The user has another peer -- #
+
+        # Get the connection
+        connection = self.connections[user["id"]]
+
+        # Determine the peer
+        user_index = connection.index(user)
+        peer = connection[user_index ^ 1] # XOR shortcut
+
+        # Return the peer's socket
+        return self.users[peer]["socket"]
 
     """
     ICE Server User Commands
@@ -356,7 +398,9 @@ class ICE(TCPServer):
                 if not request.get("message"):
                     raise InvalidRequest
                 
-                # get user's peer, and send
+                peer = self.get_peer(addr)
+                responses.append((sock, serialize({"response": "success", "message": "Sent your message!"})))
+                responses.append((peer, serialize({"response": "message", "content": message})))
 
             elif request["request"] == "disconnect":
                 remaining_user = self.disconnect_peer(addr)
@@ -371,23 +415,6 @@ class ICE(TCPServer):
             responses.append((sock, serialize({"response": "error", "reason": e.reason})))
         
         return responses
-    
-
-    def store_meeting(self, id, meeting):
-        """
-        Stores the meeting in the public database,
-        discarding any information that doesn't need to be public.
-
-        Parameters:
-        id (str): The meeting ID.
-        meeting (dict): The meeting to store.
-        """
-
-        if self.public_db:
-            self.public_db[id] = {
-                "password": meeting["password"],
-                "participants": str(meeting["participants"])
-            }
     
 
     def run(self):
