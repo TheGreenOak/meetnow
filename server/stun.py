@@ -26,8 +26,7 @@ class Stun(UDPServer):
         except KeyboardInterrupt:
             self.keep_running = False
 
-            print("\nStopping server...")
-            self.stop()
+
 
 
 def main():
