@@ -18,7 +18,7 @@ class Stun(UDPServer):
                 try:
                     # In UDP, there are no sockets. Therefore, we just need to receive data.
                     data, address = self.recv()
-                    print("[{}:{}] {}".format(address[0], address[1], data.decode()))
+                    print(f"[{address[0]}:{address[1]}] {data.decode()}")
                     ip = serialize({"ip": address[0]}).encode()
                     self.send(address, ip)
                 except BlockingIOError:
