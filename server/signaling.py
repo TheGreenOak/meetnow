@@ -363,8 +363,11 @@ class Signaling(TCPServer):
         del self.users[address]
         
         # Disconnect the socket
-        client.shutdown(socket.SHUT_RDWR)
-        client.close()
+        try:
+            client.shutdown(socket.SHUT_RDWR)
+            client.close()
+        except OSError: pass
+        
         print("[DISCONNECTED] {}:{}".format(address[0], address[1]))
 
         if second_user:
