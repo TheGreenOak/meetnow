@@ -35,8 +35,7 @@ def main():
     server.toggle_blocking_mode()
 
     print("STUN server started")
-    #server.run() # Blocking method - will continue running until the admin presses Ctrl+C
-    server.run()
+    server.run() # Blocking method - will continue running until the admin presses Ctrl+C
 
     print("\nStopping server...")
     server.stop()
