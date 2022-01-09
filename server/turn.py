@@ -1,8 +1,9 @@
 from server import UDPServer
 from threading import Thread, Event
 from json import loads as deserialize, dumps as serialize
+from database.redisdb import RedisDictDB
 
- # TODO: 
+
 SERVER_PORT = 3479 # The TURN port except for the last number  - https://www.3cx.com/blog/voip-howto/stun-voip-1/
 MINUTE = 60
 USER_TTL_MESSAGES = 2
@@ -34,11 +35,13 @@ class Turn(UDPServer):
         super().__init__(port)
 
         self.users = {}
+                # example of how the database looks:
                 # ("127.0.0.1", 1337) : {"ttl": 2, "peer" : ("128.0.0.1", 42069)},
-                # ("128.0.0.1", 42069) : {"ttl": 2, "peer" : ("127.0.0.1", 1337)}
-            # }
+                # ("128.0.0.1", 42069) : {"ttl": 2, "peer" : ("127.0.0.1", 1337)}}
+                # both of these users are in the same meeting and therefore they have each others "peers"
 
         self.expiry_stopper = Event()
+
 
     def run(self):
         threads = []
@@ -124,8 +127,6 @@ class Turn(UDPServer):
 
             self.expiry_stopper.wait(MINUTE) # We put this function to "sleep" that can be awoken
 
-        del self.users[user_uuid]
-        print("[DISCONNECTED] {}:{}".format(user_uuid[0], user_uuid[1]))
 
     def disconnect_client(self, address):
         """
@@ -154,6 +155,13 @@ class Turn(UDPServer):
 
 
 def main():
+    try:
+        public_db = RedisDictDB("meetings")
+    except RuntimeError:
+        print("Could not connect to the Redis Database.")
+        print("Please make sure that Redis is running on the local machine with the default parameters.")
+        exit(1)
+
     server = Turn(SERVER_PORT)
     server.start()
     server.toggle_blocking_mode()
