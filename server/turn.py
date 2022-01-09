@@ -48,10 +48,9 @@ class Turn(UDPServer):
 
         try:
             # Create expiration worker threads
-            expiry_workers = [Thread(target=self.user_cleaner)]
-            for worker in expiry_workers:
-                worker.start()
-                threads.append(worker)
+            expiry_worker = Thread(target=self.user_cleaner)
+            expiry_worker.start()
+            threads.append(expiry_worker)
 
             while True:
                 try:
@@ -79,6 +78,10 @@ class Turn(UDPServer):
                     pass
         except KeyboardInterrupt:
             self.keep_running = False
+            self.expiry_stopper.set()
+
+            for thread in threads:
+                thread.join()
 
 
     def check_meeting_valid(self, address):
