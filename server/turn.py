@@ -29,15 +29,14 @@ class Turn(UDPServer):
     The TURN server is responsible for connecting two users that can't communicate through P2P.
     """
     
-    connected_users = []
 
     def __init__(self, port):
         super().__init__(port)
 
-        self.users = {
-                ("127.0.0.1", 1337) : {"ttl": 2, "peer" : ("128.0.0.1", 42069)},
-                ("128.0.0.1", 42069) : {"ttl": 2, "peer" : ("127.0.0.1", 1337)}
-            }
+        self.users = {}
+                # ("127.0.0.1", 1337) : {"ttl": 2, "peer" : ("128.0.0.1", 42069)},
+                # ("128.0.0.1", 42069) : {"ttl": 2, "peer" : ("127.0.0.1", 1337)}
+            # }
 
         self.expiry_stopper = Event()
 
@@ -55,15 +54,18 @@ class Turn(UDPServer):
                 try:
                     # In UDP, there are no sockets. Therefore, we just need to receive data.
                     data, address = self.recv()
-                    self.users[(address[0], address[1])]["ttl"] = USER_TTL_MESSAGES # If we received a message from the user, they're alive.
+                    if (address[0], address[1]) not in self.users:
+                        other_user = self.check_meeting_valid(address)
+                    # If the user is not in the database, check who's the other user in the meeting and add him
+                    # Else, if the user is already in the database, just update his ttl because he's online.
+                    self.users[(address[0], address[1])] = {"ttl" : USER_TTL_MESSAGES, "peer" : (other_user)}
+                    
+                    print(self.users)
                     data = data.decode()
-                    if address not in self.connected_users:
-                        self.connected_users.append(address)
-                        
                     print(f"[{address[0]}:{address[1]}] {data}")
 
                     try:
-                        dest = self.check_meeting_valid(address, data)
+                        dest = self.check_meeting_valid(address)
                     except Exception as e:
                         print(e)
                         self.return_exception(address, e)
@@ -76,7 +78,7 @@ class Turn(UDPServer):
             self.keep_running = False
 
 
-    def check_meeting_valid(self, address, data):
+    def check_meeting_valid(self, address):
         if 1!=1: # the meeting id is not in the database
             raise NoMeetingID
         if 1!= 1: # if the password is incorrect
@@ -90,7 +92,7 @@ class Turn(UDPServer):
     
     def return_exception(self, address, exception):
         exception = "S" + exception 
-        exception.encode()
+        exception = exception.encode()
         self.send(address, exception)
 
     def forward(self, address, data):
