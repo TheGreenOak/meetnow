@@ -296,7 +296,7 @@ class ICE(TCPServer):
 
     def handle_client(self, client, address):
         """
-        A thread for handling a Signaling client.
+        A thread for handling a ICE client.
 
         Parameters:
         client (socket): The client's socket.
@@ -355,8 +355,11 @@ class ICE(TCPServer):
 
             try:
                 request = deserialize(message)
+                if type(request) is not dict:
+                    raise Exception
             except:
-                raise InvalidRequest
+                peer = self.get_peer(addr)
+                responses.append((peer, serialize("C:" + message)))
                 
             if not request.get("request"):
                 raise InvalidRequest
@@ -372,14 +375,6 @@ class ICE(TCPServer):
                 else:
                     responses.append((sock, serialize({"response": "success", "waiting": True})))
             
-            elif request["request"] == "send":
-                if not request.get("message"):
-                    raise InvalidRequest
-                
-                peer = self.get_peer(addr)
-                responses.append((sock, serialize({"response": "success", "message": "Sent your message"})))
-                responses.append((peer, serialize({"response": "message", "content": request["message"]})))
-
             elif request["request"] == "disconnect":
                 other_peer = self.disconnect_peer(addr)
                 responses.append((sock, serialize({"response": "success"})))
