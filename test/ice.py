@@ -32,9 +32,10 @@ def recv_continously(conn):
                 if not data: # If the server has closed the connection, we'll get empty data
                     break
 
-                print("\n[SERVER]", data)
                 if data == "HEARTBEAT":
                     conn.send(data)
+                else:
+                    print("\n[SERVER]", data)
             except BlockingIOError:
                 pass
     except:
