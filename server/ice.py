@@ -49,6 +49,10 @@ class InvalidUser(Exception):
     reason = "This IP address is not connected to this meeting via the Signaling service"
 
 
+class PeerMessage(Exception):
+    pass
+
+
 class ICE(TCPServer):
     """
     [ SERVER INFORMATION ]
@@ -360,6 +364,7 @@ class ICE(TCPServer):
             except:
                 peer = self.get_peer(addr)
                 responses.append((peer, serialize("C:" + message)))
+                raise PeerMessage
                 
             if not request.get("request"):
                 raise InvalidRequest
@@ -384,6 +389,7 @@ class ICE(TCPServer):
             else:
                 raise InvalidRequest
 
+        except PeerMessage: pass
         except Exception as e:
             responses.append((sock, serialize({"response": "error", "reason": e.reason})))
         
