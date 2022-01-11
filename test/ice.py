@@ -21,7 +21,6 @@ def print_menu():
     print("1 - Connect")
     print("2 - Send")
     print("3 - Disconnect")
-    print("4 - Heartbeat")
     print()
 
 
@@ -34,6 +33,8 @@ def recv_continously(conn):
                     break
 
                 print("\n[SERVER]", data)
+                if data == "HEARTBEAT":
+                    conn.send(data)
             except BlockingIOError:
                 pass
     except:
@@ -72,7 +73,7 @@ def main():
             except ValueError:
                 option = -1
 
-            if option < 1 or option > 4:
+            if option < 1 or option > 3:
                 print("Invalid option.")
             else:
                 if option == CONNECT:
@@ -88,10 +89,9 @@ def main():
                     print("Enter message: ", end="")
                     message = input("")
 
-                    conn.send('{{"request": "send", "message":"{}"}}'.format(message))
+                    conn.send(message)
                 
                 elif option == DISCONNECT: conn.send('{"request": "disconnect"}')
-                elif option == HEARTBEAT: conn.send("HEARTBEAT")
     except KeyboardInterrupt:
         print("Stopping...")
     except TimeoutError:
