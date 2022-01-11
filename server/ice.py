@@ -429,7 +429,7 @@ def main():
     # Connect to the public database
     try:
         public_db = RedisDictDB("meetings")
-    except RuntimeError:
+    except:
         print("Could not connect to the Redis Database.")
         print("Please make sure that Redis is running on the local machine with the default parameters.")
         exit(1)
