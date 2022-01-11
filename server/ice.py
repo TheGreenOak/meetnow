@@ -363,7 +363,7 @@ class ICE(TCPServer):
                     raise Exception
             except:
                 peer = self.get_peer(addr)
-                responses.append((peer, serialize("C:" + message)))
+                responses.append((peer, "C:" + message))
                 raise PeerMessage
                 
             if not request.get("request"):
