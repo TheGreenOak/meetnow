@@ -502,6 +502,8 @@ class Signaling(TCPServer):
 
             try:
                 request = deserialize(message)
+                if type(request) is not dict:
+                    raise InvalidRequest
             except:
                 raise InvalidRequest
                 
