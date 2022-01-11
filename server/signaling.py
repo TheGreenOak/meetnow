@@ -608,7 +608,7 @@ def main():
     try:
         public_db = RedisDictDB("meetings")
         public_db.flush()
-    except RuntimeError:
+    except:
         public_db = None
         print("Couldn't connect to the Redis Database.")
         print("Public functionality with other servers will not work properly.")
