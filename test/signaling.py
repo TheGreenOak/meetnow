@@ -13,7 +13,6 @@ JOIN = 2
 SWITCH = 3
 LEAVE = 4
 END = 5
-HEARTBEAT = 6
 
 ID_INDEX = 0
 PASSWORD_INDEX = 1
@@ -25,7 +24,6 @@ def print_menu():
     print("3 - Switch")
     print("4 - Leave")
     print("5 - End")
-    print("6 - Heartbeat")
     print()
 
 
@@ -37,7 +35,10 @@ def recv_continously(conn):
                 if not data: # If the server has closed the connection, we'll get empty data
                     break
 
-                print("\n[SERVER]", data)
+                if data == "HEARTBEAT":
+                    conn.send(data)
+                else:
+                    print("\n[SERVER]", data)
             except BlockingIOError:
                 pass
     except:
@@ -73,7 +74,7 @@ def main():
         while True:
             option = int(input(""))
 
-            if option < 1 or option > 6:
+            if option < 1 or option > 5:
                 print("Invalid option.")
             else:
                 if option == START: conn.send('{"request": "start"}')
@@ -90,7 +91,6 @@ def main():
                 elif option == SWITCH: conn.send('{"request": "switch"}')
                 elif option == LEAVE: conn.send('{"request": "leave"}')
                 elif option == END: conn.send('{"request": "end"}')
-                elif option == HEARTBEAT: conn.send("HEARTBEAT")
     except KeyboardInterrupt:
         print("Stopping...")
     except TimeoutError:
