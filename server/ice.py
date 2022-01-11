@@ -439,8 +439,10 @@ def main():
     server.start()
     server.toggle_blocking_mode()
     
-    print("ICE server started")
-    server.run() # Blocking method - will continue running until the admin presses Ctrl+C
+    try:
+        print("ICE server started")
+        server.run() # Blocking method - will continue running until the admin presses Ctrl+C
+    except: pass
 
     print("\nStopping server...")
     server.stop()
