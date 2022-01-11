@@ -1,3 +1,4 @@
+import threading
 from server import TCPServer
 from threading import Thread, Event
 from json import loads as deserialize, dumps as serialize
@@ -429,7 +430,11 @@ class Signaling(TCPServer):
 
             for user_uuid, user in self.users.copy().items():
                 if user["ttl"] <= 0: # The user has probably disconnected
-                    self.disconnect_client(user_uuid)
+                    participant = self.disconnect_client(user_uuid)
+                    if participant:
+                        participant, message = participant
+                        participant.send(message.encode())
+                    
                     counter += 1
                 else:
                     user["ttl"] = user["ttl"] - 1
@@ -441,42 +446,52 @@ class Signaling(TCPServer):
             self.expiry_stopper.wait(MINUTE) # We put this function to "sleep" that can be awoken
 
 
-    def handle_client(self, client, address):
+    def user_handler(self):
         """
-        A thread for handling a Signaling client.
-
-        Parameters:
-        client (socket): The client's socket.
-        address (tuple): The client's address.
+        A thread for handling all the users currently connected.
+        This is done so to eliminate the need for a thread for each user.
         """
 
-        try:
-            # We want to run until the server is forcefully shut down
-            while self.keep_running:
+        # We want to run this thread until the server stops
+        while self.keep_running:
+
+            # Iterate through all the connected users
+            for address, user in self.users.copy().items():
                 try:
-                    data = client.recv(MAX_MESSAGE_LENGTH)
-                    if not data:
-                        break
 
-                    # Forward the message to the handler, and send all the responses to the respective clients
-                    for sock, message in self.handle_message(address, client, data.decode()):
-                        sock.send(message.encode())
+                    # Attempt receiving a message
+                    data = user["socket"].recv(MAX_MESSAGE_LENGTH)
+
+                    if not data:  # The user has disconnected
+                        participant = self.disconnect_client(address)
+                        if participant:
+                            participant, message = participant
+                            participant.send(message.encode())
+                        
+                        continue
+                        
+                    # We got a message! Forward it to the handler, and try sending responses
+                    try:
+                        for sock, message in self.handle_message(address, user["socket"], data.decode()):
+                            sock.send(message.encode())
+                    except:
+                        # An unknown error has occurred
+                        print("CRITICAL: An unknown error has occurred.")
+                        print("Client: {}:{}".format(address[0], address[1]))
+                        print("Message: {}".format(data.decode()))
+                        print(traceback.format_exc())
+
+                        user["socket"].send(serialize({"response": "error", "reason": "An unknown error occurred"}).encode())
                 except BlockingIOError:
                     pass
-        except (ConnectionError, OSError):
-            pass
-        except:
-            # An unknown error has occurred
-            print("CRITICAL: An unknown error has occurred.")
-            print("Client: {}:{}".format(address[0], address[1]))
-            print("Message: {}".format(data.decode()))
-            print(traceback.format_exc())
 
-            client.send(serialize({"response": "error", "reason": "An unknown error occurred"}).encode())
+                except (ConnectionError, OSError):
+                    participant = self.disconnect_client(address)
+                    if participant:
+                        participant, message = participant
+                        participant.send(message.encode())
             
-        finally:
-            if self.users.get(address):
-                self.disconnect_client(address)
+            
 
 
     def handle_message(self, addr, sock, message):
@@ -573,15 +588,12 @@ class Signaling(TCPServer):
     
 
     def run(self):
-        # We make a thread list in order to make sure we don't kill the program with running threads
-        threads = []
+        # Worker thread list
+        threads = [Thread(target=self.meeting_cleaner), Thread(target=self.user_cleaner), Thread(target=self.user_handler)]
 
         try:
-            # Create expiration worker threads
-            expiry_workers = [Thread(target=self.meeting_cleaner), Thread(target=self.user_cleaner)]
-            for worker in expiry_workers:
-                worker.start()
-                threads.append(worker)
+            # Start the threads
+            for worker in threads: worker.start()
 
             # Accept new clients and handle them
             while True:
@@ -589,11 +601,6 @@ class Signaling(TCPServer):
                     client, address = self.accept()
                     self.users[address] = {"ttl": USER_TTL_MESSAGES, "socket": client} # Insert the user to the database
                     print("[CONNECTED] {}:{}".format(address[0], address[1]))
-
-                    # Make a new thread to handle the client
-                    client_thread = Thread(target=self.handle_client, args=(client, address)) # TODO: make this single-threaded
-                    client_thread.start()
-                    threads.append(client_thread)
                 except BlockingIOError:
                     pass
         except KeyboardInterrupt:
