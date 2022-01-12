@@ -8,6 +8,9 @@ SERVER_PORT = 3479 # The TURN port except for the last number  - https://www.3cx
 MINUTE = 60
 USER_TTL_MESSAGES = 2
 
+NOT_FOUND_USER_YET = 0
+OTHER_USER_NOT_CONNECTED = 1
+
 
 class NoMeetingID(Exception):
     reason = "No meeting ID found"
@@ -31,71 +34,54 @@ class Turn(UDPServer):
     """
     
 
-    def __init__(self, port):
+    def __init__(self, port, public_db):
         super().__init__(port)
 
         self.users = {}
                 # example of how the database looks:
-                # ("127.0.0.1", 1337) : {"ttl": 2, "peer" : ("128.0.0.1", 42069)},
-                # ("128.0.0.1", 42069) : {"ttl": 2, "peer" : ("127.0.0.1", 1337)}}
+                # ("127.0.0.1", 1337) : {"ttl": 2, meeting_id : 3456324, "peer" : ("128.0.0.1", 42069)},
+                # ("128.0.0.1", 42069) : {"ttl": 2, meeting_id : 3456324, "peer" : ("127.0.0.1", 1337)}}
                 # both of these users are in the same meeting and therefore they have each others "peers"
 
         self.expiry_stopper = Event()
+        self.public_db = public_db
 
+    def check_meeting_id(self, meeting_id):
+        if self.public_db[meeting_id] is None:
+            return 0 # Meeting ID not found
+        return 1 # Meeting ID found
+    
+    def check_meeting_password(self, meeting_id, password):
+        if self.public_db[meeting_id]["password"] != password:
+            return 0
+        return 1
 
-    def run(self):
-        threads = []
+    def find_other_user(self, address, meeting_id, password):
+        # the meeting id is not in the database
+        # please give me the meeting id and the password.
 
-        try:
-            # Create expiration worker threads
-            expiry_worker = Thread(target=self.user_cleaner)
-            expiry_worker.start()
-            threads.append(expiry_worker)
-
-            while True:
-                try:
-                    # In UDP, there are no sockets. Therefore, we just need to receive data.
-                    data, address = self.recv()
-                    if (address[0], address[1]) not in self.users:
-                        other_user = self.check_meeting_valid(address)
-                    # If the user is not in the database, check who's the other user in the meeting and add him
-                    # Else, if the user is already in the database, just update his ttl because he's online.
-                    self.users[(address[0], address[1])] = {"ttl" : USER_TTL_MESSAGES, "peer" : (other_user)}
-                    
-                    print(self.users)
-                    data = data.decode()
-                    print(f"[{address[0]}:{address[1]}] {data}")
-
-                    try:
-                        dest = self.check_meeting_valid(address)
-                    except Exception as e:
-                        print(e)
-                        self.return_exception(address, e)
-                    
-                    self.forward(dest, data)
-
-                except BlockingIOError:
-                    pass
-        except KeyboardInterrupt:
-            self.keep_running = False
-            self.expiry_stopper.set()
-
-            for thread in threads:
-                thread.join()
-
-
-    def check_meeting_valid(self, address):
-        if 1!=1: # the meeting id is not in the database
+        if self.public_db[meeting_id] is None: # TODO replace this with check_meeting_id function
             raise NoMeetingID
-        if 1!= 1: # if the password is incorrect
+        # if the password is incorrect
+        if self.public_db[meeting_id]["password"] != password:  
             raise WrongPassword
-        if 1!=1: # if there is only 1 user
+        # if there is only 1 user
+        if self.public_db[meeting_id]["participants"][1] is None:
             raise AloneInMeeting
-        if 1!=1: # check if the user is connected to the turn server
+        # check if the user is connected to the turn server
+        if not self.users[self.public_db[meeting_id]["participants"][1]]: 
             raise OtherUserNotConnected
         # return participant to send to
         return ("127.0.0.1", 1337)
-    
+
+    def is_other_user_connected(self, address):
+        # Get the user
+        user = self.users[address]
+        other_user = None
+
+        # If the user is already connected, they will receive an error.
+        # We just want to see which error they should receive.
+
     def return_exception(self, address, exception):
         exception = "S" + exception 
         exception = exception.encode()
@@ -105,7 +91,7 @@ class Turn(UDPServer):
         data = "U" + data
         data = data.encode()
         self.send(address, data)
-    
+
     def user_cleaner(self):
         """
         This method is responsible for checking the user's TTL, and will send a heartbeat every minute.
@@ -156,6 +142,68 @@ class Turn(UDPServer):
         if second_user:
             return (second_user, serialize({"response": "info", "type": "left"}))
 
+        def handle_message(address, data):
+            
+
+    def run(self):
+        threads = []
+
+        try:
+            # Create expiration worker threads
+            expiry_worker = Thread(target=self.user_cleaner)
+            expiry_worker.start()
+            threads.append(expiry_worker)
+
+            while True: #TODO ask yeho if two users are connected to signaling or just one can he connect to ice by himslef
+                try:
+                    # In UDP, there are no sockets. Therefore, we just need to receive data.
+                    data, address = self.recv()
+                    if (address[0], address[1]) not in self.users:
+                        meeting_id = data.decode()
+                        if not self.check_meeting_id(meeting_id): # Meeting ID not found
+                            raise NoMeetingID
+                            #data = "Meeting ID not found, Try again:"
+                            #self.send(address, data.encode())
+                        self.users[(address[0], address[1])] = {"ttl" : USER_TTL_MESSAGES, "meeting_id" : meeting_id, "peer" : NOT_FOUND_USER_YET}
+
+                    # If we reached here, the user is in the Redis database.
+                    # We just need the password to his meeting to make sure its actually him.
+                    if self.users[(address[0], address[1])]["peer"] == NOT_FOUND_USER_YET: # We didn't find the other user yet.
+                        meeting_id = self.users[(address[0], address[1])]["meeting_id"]
+                        password = data.decode()
+                        if not self.check_meeting_password(meeting_id, password): # Password is wrong
+                            raise WrongPassword
+                            #data = "Password is wrong, Try again:"
+                            #self.send(address, data.encode())
+                        self.find_other_user(address)
+
+                    # If the user is not in the database, check who's the other user in the meeting and add him
+                    # Else, if the user is already in the database, just update his ttl because he's online.
+                    self.users[(address[0], address[1])] = {"ttl" : USER_TTL_MESSAGES, "peer" : (other_user)}
+                    
+                    print(self.users)
+                    data = data.decode()
+                    print(f"[{address[0]}:{address[1]}] {data}")
+
+                    try:
+                        dest = self.find_other_user(address)
+                    except Exception as e:
+                        print(e)
+                        self.return_exception(address, e)
+                    
+                    self.forward(dest, data)
+
+                except BlockingIOError:
+                    pass
+                except (NoMeetingID, WrongPassword) as e:
+                    self.return_exception(address, e)
+        except KeyboardInterrupt:
+            self.keep_running = False
+            self.expiry_stopper.set()
+
+            for thread in threads:
+                thread.join()
+
 
 def main():
     try:
@@ -165,7 +213,7 @@ def main():
         print("Please make sure that Redis is running on the local machine with the default parameters.")
         exit(1)
 
-    server = Turn(SERVER_PORT)
+    server = Turn(SERVER_PORT, public_db)
     server.start()
     server.toggle_blocking_mode()
 
