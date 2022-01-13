@@ -11,6 +11,13 @@ class RedisDictDB:
         except redis.ConnectionError:
             raise RuntimeError("Could not connect to Redis server")
     
+    
+    def flush(self):
+        """
+        Flush all keys.
+        """
+        self.db.flushall()
+
 
     def __getitem__(self, key):
         """
