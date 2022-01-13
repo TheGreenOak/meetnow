@@ -27,6 +27,9 @@ class AloneInMeeting(Exception):
 class OtherUserNotConnected(Exception):
     reason = "The other user is not connected yet"
 
+class ForwardMessage(Exception):
+    pass
+
 
 class Turn(UDPServer):
     """
@@ -46,51 +49,46 @@ class Turn(UDPServer):
         self.expiry_stopper = Event()
         self.public_db = public_db
 
-    def check_meeting_id(self, meeting_id):
-        if self.public_db[meeting_id] is None:
-            return 0 # Meeting ID not found
-        return 1 # Meeting ID found
-    
-    def check_meeting_password(self, meeting_id, password):
-        if self.public_db[meeting_id]["password"] != password:
-            return 0
-        return 1
+
 
     def find_other_user(self, address, meeting_id, password):
-        # the meeting id is not in the database
-        # please give me the meeting id and the password.
-
-        if self.public_db[meeting_id] is None: # TODO replace this with check_meeting_id function
+        # Checking if the meeting ID is not existing
+        try:
+            meeting = self.public_db[meeting_id]
+        except:
             raise NoMeetingID
-        # if the password is incorrect
-        if self.public_db[meeting_id]["password"] != password:  
+        
+        # Checking if the password is correct
+        if self.meeting[meeting_id]["password"] != password:  
             raise WrongPassword
-        # if there is only 1 user
-        if self.public_db[meeting_id]["participants"][1] is None:
+
+        # Checking if if there is only 1 user
+        try:
+            return self.meeting[meeting_id]["participants"][1]
+        except:
             raise AloneInMeeting
-        # check if the user is connected to the turn server
-        if not self.users[self.public_db[meeting_id]["participants"][1]]: 
-            raise OtherUserNotConnected
-        # return participant to send to
-        return ("127.0.0.1", 1337)
 
-    def is_other_user_connected(self, address):
-        # Get the user
-        user = self.users[address]
-        other_user = None
+    def server_message(self, responses):
+        
+        addresses = [address[0] for address in responses]
+        data_to_send = [data[0] for data in responses]
 
-        # If the user is already connected, they will receive an error.
-        # We just want to see which error they should receive.
+        for i in range(len(addresses)):
 
-    def return_exception(self, address, exception):
-        exception = "S" + exception 
-        exception = exception.encode()
-        self.send(address, exception)
+            address = addresses[i]
+            data = "S" + data_to_send[i]
+            data = data.encode()
+            self.send(address, data)
 
     def forward(self, address, data):
         data = "U" + data
         data = data.encode()
         self.send(address, data)
+
+    def return_exception(self, address, exception):
+        exception = "S" + exception 
+        exception = exception.encode()
+        self.send(address, exception)
 
     def user_cleaner(self):
         """
@@ -142,8 +140,51 @@ class Turn(UDPServer):
         if second_user:
             return (second_user, serialize({"response": "info", "type": "left"}))
 
-        def handle_message(address, data):
+    def handle_message(self, address, data):
+
+        responses = []
+
+        try:
+
+            if data == "HEARTBEAT":
+                return [] # No need to return a message
+
+            try:
+                request = deserialize(data)
+                if type(request) is not dict: # Then the message if for the other user and should be forwarded
+                    raise Exception
+            except:
+                self.forward(address, data)
+                raise ForwardMessage
+
+            if not request.get("request"):
+                raise InvalidRequest
+
+            if request["request"] == "connect":
+                if not request.get("id") or not request.get("password"):
+                    raise InvalidRequest
             
+                try:
+                    other_user = self.find_other_user(address, request["id"], request["password"])
+                
+                    if other_user:
+                        respwnses.append((address, serialize({"response": "success", "waiting": False})))
+                        responses.append((other_user, serialize({"response": "info", "type": "connected"})))
+                    else:
+                        responses.append((address, serialize({"response": "success", "waiting": True})))
+                except AloneInMeeting:
+                    responses.append((address, serialize({"response": "success", "waiting": True})))
+
+            else:
+                raise InvalidRequest
+
+        except ForwardMessage:
+            pass
+
+        except Exception as e:
+            response = (address, serialize({"response": "error", "reason": e.reason}))
+        
+        return responses
 
     def run(self):
         threads = []
@@ -154,48 +195,29 @@ class Turn(UDPServer):
             expiry_worker.start()
             threads.append(expiry_worker)
 
-            while True: #TODO ask yeho if two users are connected to signaling or just one can he connect to ice by himslef
+            while True:
                 try:
                     # In UDP, there are no sockets. Therefore, we just need to receive data.
                     data, address = self.recv()
-                    if (address[0], address[1]) not in self.users:
-                        meeting_id = data.decode()
-                        if not self.check_meeting_id(meeting_id): # Meeting ID not found
-                            raise NoMeetingID
-                            #data = "Meeting ID not found, Try again:"
-                            #self.send(address, data.encode())
-                        self.users[(address[0], address[1])] = {"ttl" : USER_TTL_MESSAGES, "meeting_id" : meeting_id, "peer" : NOT_FOUND_USER_YET}
-
-                    # If we reached here, the user is in the Redis database.
-                    # We just need the password to his meeting to make sure its actually him.
-                    if self.users[(address[0], address[1])]["peer"] == NOT_FOUND_USER_YET: # We didn't find the other user yet.
-                        meeting_id = self.users[(address[0], address[1])]["meeting_id"]
-                        password = data.decode()
-                        if not self.check_meeting_password(meeting_id, password): # Password is wrong
-                            raise WrongPassword
-                            #data = "Password is wrong, Try again:"
-                            #self.send(address, data.encode())
-                        self.find_other_user(address)
-
-                    # If the user is not in the database, check who's the other user in the meeting and add him
-                    # Else, if the user is already in the database, just update his ttl because he's online.
-                    self.users[(address[0], address[1])] = {"ttl" : USER_TTL_MESSAGES, "peer" : (other_user)}
-                    
-                    print(self.users)
                     data = data.decode()
-                    print(f"[{address[0]}:{address[1]}] {data}")
 
                     try:
-                        dest = self.find_other_user(address)
-                    except Exception as e:
-                        print(e)
-                        self.return_exception(address, e)
+                        self.users[address]["ttl"] = USER_TTL_MESSAGES # If we received a message from the user, they're alive.
+                    except:
+                        pass
+
+                    responses = self.handle_message(address, data)
                     
-                    self.forward(dest, data)
+                    print(self.users)
+                    print(responses)
+
+                    print(f"[{address[0]}:{address[1]}] {data}")
+
+                    self.server_message(responses)
 
                 except BlockingIOError:
                     pass
-                except (NoMeetingID, WrongPassword) as e:
+                except Exception as e:
                     self.return_exception(address, e)
         except KeyboardInterrupt:
             self.keep_running = False
