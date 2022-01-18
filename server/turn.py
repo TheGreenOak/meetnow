@@ -1,8 +1,10 @@
+from http.client import responses
 from server import UDPServer
 from threading import Thread, Event
 from json import loads as deserialize, dumps as serialize
 from database.redisdb import RedisDictDB
 
+import traceback
 
 SERVER_PORT = 3479 # The TURN port except for the last number  - https://www.3cx.com/blog/voip-howto/stun-voip-1/
 MINUTE = 60
@@ -79,8 +81,6 @@ class Turn(UDPServer):
         self.public_db = public_db
         
 
-
-
     def find_other_user(self, address, meeting_id, password):
         # Checking if the meeting ID is existing
         try:
@@ -116,9 +116,7 @@ class Turn(UDPServer):
                 return None
 
 
-
-
-    def server_message(self, responses):
+    def server_message(self, responses): ############
         
         addresses = [address[0] for address in responses]
         data_to_send = [data[1] for data in responses]
@@ -133,19 +131,17 @@ class Turn(UDPServer):
             data = data.encode()
             self.send(address, data)
 
-    def forward(self, address, data):
+    def forward(self, address, data): 
         print(f"forward: {address}")
         print(f"forward: {data}")
         data = "U" + data
         data = data.encode()
-        self.send(address, data)
+        other_user = self.users[address]["peer"]
+        if other_user:
+            self.send(other_user, data)
+        else:
+            raise OtherUserNotConnected
 
-    def return_exception(self, address, exception):
-        print(f"forward: {address}")
-        print(f"return_exception {exception}")
-        exception = "S" + exception 
-        exception = exception.encode()
-        self.send(address, exception)
 
     def user_cleaner(self):
         """
@@ -197,6 +193,142 @@ class Turn(UDPServer):
         if second_user:
             return (second_user, serialize({"response": "info", "type": "left"}))
 
+
+    def connect_user(self, address, data):
+
+        responses = None
+
+        try:
+            request = deserialize(data)
+        except:
+            raise NotJsonFormat
+
+        if not request.get("request"):
+            raise InvalidRequest
+
+        if request["request"] == "connect":
+            if not request.get("id") or not request.get("password"):
+                raise InvalidRequest
+
+            try:
+                other_user = self.find_other_user(address, request["id"], request["password"])
+            
+                if other_user:
+                    # Adding the user with peer : other_user
+                    self.users[address] = {"ttl" : USER_TTL_MESSAGES, "peer" : other_user}
+                    responses.append((address, serialize({"response": "success", "waiting": False})))
+                    responses.append((other_user, serialize({"response": "info", "type": "connected"})))
+                else:
+                    # Adding the user with peer : None
+                    self.users[address] = {"ttl" : USER_TTL_MESSAGES, "peer" : None}
+                    responses.append((address, serialize({"response": "success", "waiting": True})))
+                
+            except AloneInMeeting:
+                # Adding the user because the ID and passwords are correct but no one is in the meeting
+                self.users[address] = {"ttl" : USER_TTL_MESSAGES, "peer" : None}
+                responses.append((address, serialize({"response": "success", "waiting": True})))
+
+            except (InvalidRequest, NoMeetingID, NotJsonFormat, WrongPassword) as e:
+                # Catches the exceptions from find_other_user and sends them to the user
+                responses.append((address, serialize({"response": "error", "reason": e.reason})))
+
+            except Exception as e:
+                # If something happend and i dont know what, tell the user unknown error
+                # An unknown error has occurred
+                print("CRITICAL: An unknown error has occurred.")
+                print("Client: {}:{}".format(address[0], address[1]))
+                print("Message: {}".format(data.decode()))
+                print(traceback.format_exc())
+
+                responses.append((address, serialize({"response": "error", "reason" : "Unknown error occured"})))
+
+        else:
+            responses.append((address, serialize({"response": "error", "reason": InvalidRequest.reason})))
+            
+        return responses
+
+
+    def run(self):
+        threads = []
+
+        try:
+            # Create expiration worker threads
+            expiry_worker = Thread(target=self.user_cleaner)
+            expiry_worker.start()
+            threads.append(expiry_worker)
+
+            while True:
+                try:
+                    # In UDP, there are no sockets. Therefore, we just need to receive data.
+                    data, address = self.recv()
+                    data = data.decode()
+
+                    try:
+                        # If we received a message from the user, they're alive.
+                        self.users[address]["ttl"] = USER_TTL_MESSAGES
+
+                        print(f"run, users {self.users}")
+                        print(f"run, responses {responses}")
+                        
+                    except:
+                        responses = self.connect_user()
+
+                    print(f"[{address[0]}:{address[1]}] {data}")
+
+                    if responses:
+                        # TODO create self.handle_responses(responses)
+                        pass # return responses.
+
+                    elif data == "HEARTBEAT": 
+                        # If the message is heartbeat, we don't need to do anything, we already updated the TTL
+                        pass
+                    
+                    else:
+                        try:
+                            self.forward(address, data)
+                        except OtherUserNotConnected as e:
+                            responses.append(address, serialize({"response": "error", "reason": e.reason}))))
+                            # TODO create self.handle_responses(responses)
+                            pass # return responses.
+
+                except BlockingIOError:
+                    pass
+        
+        except KeyboardInterrupt:
+            self.keep_running = False
+            self.expiry_stopper.set()
+
+            for thread in threads:
+                thread.join()
+
+
+def main():
+    try:
+        public_db = RedisDictDB("meetings")
+    except:
+        print("Could not connect to the Redis Database.")
+        print("Please make sure that Redis is running on the local machine with the default parameters.")
+        exit(1)
+
+    server = Turn(SERVER_PORT, public_db)
+    server.start()
+    server.toggle_blocking_mode()
+
+    print("TURN server started")
+    server.run() # Blocking method - will continue running until the admin presses Ctrl+C
+
+    print("\nStopping server...")
+    server.stop()
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+    """
     def handle_message(self, address, data):
 
         responses = []
@@ -255,125 +387,4 @@ class Turn(UDPServer):
                 #responses.append((address, serialize({"response": "error", "reason" : "Unknown error occured"})))
         
         return responses
-
-    def connect_user(self, address, data):
-
-        responses = None
-
-        try:
-            request = deserialize(data)
-        except:
-            raise NotJsonFormat
-
-        if not request.get("request"):
-            raise InvalidRequest
-
-        if request["request"] == "connect":
-            if not request.get("id") or not request.get("password"):
-                raise InvalidRequest
-
-            try:
-                other_user = self.find_other_user(address, request["id"], request["password"])
-            
-                if other_user:
-                    # Adding the user with peer : other_user
-                    self.users[address] = {"ttl" : USER_TTL_MESSAGES, "peer" : other_user}
-                    responses.append((address, serialize({"response": "success", "waiting": False})))
-                    responses.append((other_user, serialize({"response": "info", "type": "connected"})))
-                else:
-                    # Adding the user with peer : None
-                    self.users[address] = {"ttl" : USER_TTL_MESSAGES, "peer" : None}
-                    responses.append((address, serialize({"response": "success", "waiting": True})))
-                
-            except AloneInMeeting:
-                # Adding the user because the ID and passwords are correct but no one is in the meeting
-                self.users[address] = {"ttl" : USER_TTL_MESSAGES, "peer" : None}
-                responses.append((address, serialize({"response": "success", "waiting": True})))
-
-            except NoMeetingID:
-                # dont
-                responses.append((address, serialize({"response": "error", "reason": NoMeetingID.reason})))
-
-            except WrongPassword:
-                #dont
-                responses.append((address, serialize({"response": "error", "reason": WrongPassword.reason})))
-
-            except Exception as e:
-                # if something happend and i dont know what, tell the user unknown error
-                # catches the exceptions from find_other_user and sends them to the user
-
-
-        else:
-            raise InvalidRequest
-
-
-    def run(self):
-        threads = []
-
-        try:
-            # Create expiration worker threads
-            expiry_worker = Thread(target=self.user_cleaner)
-            expiry_worker.start()
-            threads.append(expiry_worker)
-
-            while True:
-                try:
-                    # In UDP, there are no sockets. Therefore, we just need to receive data.
-                    data, address = self.recv()
-                    data = data.decode()
-
-                    try:
-                        # If we received a message from the user, they're alive.
-                        self.users[address]["ttl"] = USER_TTL_MESSAGES
-
-                        responses = self.handle_message(address, data)
-                        print(f"run, users {self.users}")
-                        print(f"run, responses {responses}")
-                        
-                    except:
-                        responses = self.connect_user()
-
-                    print(f"[{address[0]}:{address[1]}] {data}")
-
-
-
-                    
-
-                    self.handle_responses(responses)
-                    ################## dont know whats going down there
-                except BlockingIOError:
-                    pass
-                except Exception as e:
-                    #try:
-                    self.return_exception(address, e.reason)
-                    #except:
-                     #   responses.append((address, serialize({"response": "error", "reason" : "Unknown error occured"})))
-        
-        except KeyboardInterrupt:
-            self.keep_running = False
-            self.expiry_stopper.set()
-
-            for thread in threads:
-                thread.join()
-
-
-def main():
-    try:
-        public_db = RedisDictDB("meetings")
-    except:
-        print("Could not connect to the Redis Database.")
-        print("Please make sure that Redis is running on the local machine with the default parameters.")
-        exit(1)
-
-    server = Turn(SERVER_PORT, public_db)
-    server.start()
-    server.toggle_blocking_mode()
-
-    print("TURN server started")
-    server.run() # Blocking method - will continue running until the admin presses Ctrl+C
-
-    print("\nStopping server...")
-    server.stop()
-
-if __name__ == "__main__":
-    main()
+"""
