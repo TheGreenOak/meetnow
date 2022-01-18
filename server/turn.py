@@ -11,6 +11,8 @@ USER_TTL_MESSAGES = 2
 NOT_FOUND_USER_YET = 0
 OTHER_USER_NOT_CONNECTED = 1
 
+class NotJsonFormat(Exception):
+    reason = "Request not in JSON format."
 
 class NoMeetingID(Exception):
     reason = "No meeting ID found"
@@ -34,12 +36,38 @@ class ForwardMessage(Exception):
 class Turn(UDPServer):
     """
     The TURN server is responsible for connecting two users that can't communicate through P2P.
+    [ SERVER INFORMATION ] # TODO change this
+    The ICE (Internet Connectivity Establishment) server is responsible for temporarily connecting
+    both clients, and transporting ICE messages between them. This is done so that the clients
+    will be able communicate with each other by synchronizing communication ports and IP addresses.
+
+    [ DATABASE INFORMATION ] # TODO chang this
+    The ICE server maintains two internal databases, and has read access for the public one.
+    The two internal databases are used mainly for checking request validity.
+
+    [self.users]
+    (ip, port): {
+        ttl: int,
+        peer: (other ip, other port),
+        id: str [optional]???
+    }
+
+    [self.connections]
+    "meeting id": [(ip, port), (ip, port)]
+
+    [self.public_db]
+    "meeting id": {
+        password: str,
+        participants: [ip, ip]
+    }
     """
     
 
     def __init__(self, port, public_db):
         super().__init__(port)
 
+        self.connections = {}
+                
         self.users = {}
                 # example of how the database looks:
                 # ("127.0.0.1", 1337) : {"ttl": 2, meeting_id : 3456324, "peer" : ("128.0.0.1", 42069)},
@@ -47,45 +75,74 @@ class Turn(UDPServer):
                 # both of these users are in the same meeting and therefore they have each others "peers"
 
         self.expiry_stopper = Event()
+
         self.public_db = public_db
+        
 
 
 
     def find_other_user(self, address, meeting_id, password):
-        # Checking if the meeting ID is not existing
+        # Checking if the meeting ID is existing
         try:
             meeting = self.public_db[meeting_id]
         except:
             raise NoMeetingID
         
         # Checking if the password is correct
-        if self.meeting[meeting_id]["password"] != password:  
+        if meeting["password"] != password:  
             raise WrongPassword
 
-        # Checking if if there is only 1 user
+        # Checking if if there is only 1 user in the meeting
         try:
-            return self.meeting[meeting_id]["participants"][1]
+            meeting["participants"][1]
         except:
             raise AloneInMeeting
+
+
+        # If there are two users in the database, find out which one is the other user
+        try:
+            both_users = self.connections[meeting_id]
+            if address == both_users[1]:
+                return both_users[0]
+            return both_users[1]
+
+        # If it exists, add this user and send the other one
+        except:
+            if(self.connections[meeting_id]):
+                self.connections[meeting_id] += address
+                return self.connections[meeting_id][0]
+            else: # Otherwise, create it and return nothing
+                self.connections[meeting_id] = (address)
+                return None
+
+
+
 
     def server_message(self, responses):
         
         addresses = [address[0] for address in responses]
-        data_to_send = [data[0] for data in responses]
+        data_to_send = [data[1] for data in responses]
 
         for i in range(len(addresses)):
 
             address = addresses[i]
+            print(f"data? {data_to_send}")
             data = "S" + data_to_send[i]
+            print(f"forward: {address}")
+            print(f"forward: {data}")
             data = data.encode()
             self.send(address, data)
 
     def forward(self, address, data):
+        print(f"forward: {address}")
+        print(f"forward: {data}")
         data = "U" + data
         data = data.encode()
         self.send(address, data)
 
     def return_exception(self, address, exception):
+        print(f"forward: {address}")
+        print(f"return_exception {exception}")
         exception = "S" + exception 
         exception = exception.encode()
         self.send(address, exception)
@@ -145,17 +202,27 @@ class Turn(UDPServer):
         responses = []
 
         try:
-
             if data == "HEARTBEAT":
                 return [] # No need to return a message
 
             try:
-                request = deserialize(data)
-                if type(request) is not dict: # Then the message if for the other user and should be forwarded
-                    raise Exception
+                self.users[address]
+                try:# TODO fix dis cod
+                    request = deserialize(data)
+                    if type(request) is not dict: # Then the message if for the other user and should be forwarded
+                        try:
+                            other_address = self.users[address]["peer"]
+                            raise ForwardMessage
+                        except:
+                            data = serialize({"response": "error", "reason": "Other user not connected."})
+                        
+                        self.return_exception(address, data)
+                except:
+                    raise ForwardMessage 
             except:
-                self.forward(address, data)
-                raise ForwardMessage
+                data = serialize({"response": "error", "reason": "Connect to the TURN server first with ID and Password."})
+                return responses
+
 
             if not request.get("request"):
                 raise InvalidRequest
@@ -168,7 +235,7 @@ class Turn(UDPServer):
                     other_user = self.find_other_user(address, request["id"], request["password"])
                 
                     if other_user:
-                        respwnses.append((address, serialize({"response": "success", "waiting": False})))
+                        responses.append((address, serialize({"response": "success", "waiting": False})))
                         responses.append((other_user, serialize({"response": "info", "type": "connected"})))
                     else:
                         responses.append((address, serialize({"response": "success", "waiting": True})))
@@ -179,12 +246,66 @@ class Turn(UDPServer):
                 raise InvalidRequest
 
         except ForwardMessage:
-            pass
+            self.forward(address, responses)
 
         except Exception as e:
-            response = (address, serialize({"response": "error", "reason": e.reason}))
+            #try:
+            responses.append((address, serialize({"response": "error", "reason": e.reason})))
+            #except:
+                #responses.append((address, serialize({"response": "error", "reason" : "Unknown error occured"})))
         
         return responses
+
+    def connect_user(self, address, data):
+
+        responses = None
+
+        try:
+            request = deserialize(data)
+        except:
+            raise NotJsonFormat
+
+        if not request.get("request"):
+            raise InvalidRequest
+
+        if request["request"] == "connect":
+            if not request.get("id") or not request.get("password"):
+                raise InvalidRequest
+
+            try:
+                other_user = self.find_other_user(address, request["id"], request["password"])
+            
+                if other_user:
+                    # Adding the user with peer : other_user
+                    self.users[address] = {"ttl" : USER_TTL_MESSAGES, "peer" : other_user}
+                    responses.append((address, serialize({"response": "success", "waiting": False})))
+                    responses.append((other_user, serialize({"response": "info", "type": "connected"})))
+                else:
+                    # Adding the user with peer : None
+                    self.users[address] = {"ttl" : USER_TTL_MESSAGES, "peer" : None}
+                    responses.append((address, serialize({"response": "success", "waiting": True})))
+                
+            except AloneInMeeting:
+                # Adding the user because the ID and passwords are correct but no one is in the meeting
+                self.users[address] = {"ttl" : USER_TTL_MESSAGES, "peer" : None}
+                responses.append((address, serialize({"response": "success", "waiting": True})))
+
+            except NoMeetingID:
+                # dont
+                responses.append((address, serialize({"response": "error", "reason": NoMeetingID.reason})))
+
+            except WrongPassword:
+                #dont
+                responses.append((address, serialize({"response": "error", "reason": WrongPassword.reason})))
+
+            except Exception as e:
+                # if something happend and i dont know what, tell the user unknown error
+                # catches the exceptions from find_other_user and sends them to the user
+
+
+        else:
+            raise InvalidRequest
+
 
     def run(self):
         threads = []
@@ -202,23 +323,32 @@ class Turn(UDPServer):
                     data = data.decode()
 
                     try:
-                        self.users[address]["ttl"] = USER_TTL_MESSAGES # If we received a message from the user, they're alive.
-                    except:
-                        pass
+                        # If we received a message from the user, they're alive.
+                        self.users[address]["ttl"] = USER_TTL_MESSAGES
 
-                    responses = self.handle_message(address, data)
-                    
-                    print(self.users)
-                    print(responses)
+                        responses = self.handle_message(address, data)
+                        print(f"run, users {self.users}")
+                        print(f"run, responses {responses}")
+                        
+                    except:
+                        responses = self.connect_user()
 
                     print(f"[{address[0]}:{address[1]}] {data}")
 
-                    self.server_message(responses)
 
+
+                    
+
+                    self.handle_responses(responses)
+                    ################## dont know whats going down there
                 except BlockingIOError:
                     pass
                 except Exception as e:
-                    self.return_exception(address, e)
+                    #try:
+                    self.return_exception(address, e.reason)
+                    #except:
+                     #   responses.append((address, serialize({"response": "error", "reason" : "Unknown error occured"})))
+        
         except KeyboardInterrupt:
             self.keep_running = False
             self.expiry_stopper.set()
