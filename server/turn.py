@@ -1,4 +1,6 @@
 from http.client import responses
+from lib2to3.pgen2.token import EQUAL
+from logging import exception
 from server import UDPServer
 from threading import Thread, Event
 from json import loads as deserialize, dumps as serialize
@@ -101,42 +103,47 @@ class Turn(UDPServer):
 
         # If there are two users in the database, find out which one is the other user
         try:
-            both_users = self.connections[meeting_id]
+            both_users = self.connections[meeting_id] # TODO: check if there are actually two users
+            if len(both_users) == 1:
+                raise Exception
+            print(f"akdsjlkadjflkajdfkajsdlkajsdlfkjasdkfjalksdfjlkasjflkasdfklasdjf {both_users}")
             if address == both_users[1]:
                 return both_users[0]
             return both_users[1]
 
         # If it exists, add this user and send the other one
         except:
-            if(self.connections[meeting_id]):
-                self.connections[meeting_id] += address
+            if self.connections.get(meeting_id):
+                self.connections[meeting_id].append(address)
                 return self.connections[meeting_id][0]
             else: # Otherwise, create it and return nothing
-                self.connections[meeting_id] = (address)
+                self.connections[meeting_id] = [(address)]
                 return None
 
 
-    def server_message(self, responses): ############
+    def handle_responses(self, responses): ############ TODO: test this
         
         addresses = [address[0] for address in responses]
         data_to_send = [data[1] for data in responses]
 
+        print(addresses)
         for i in range(len(addresses)):
 
             address = addresses[i]
-            print(f"data? {data_to_send}")
             data = "S" + data_to_send[i]
-            print(f"forward: {address}")
-            print(f"forward: {data}")
+            print(f"forward handle_responses: {address}")
+            print(f"forward handle_responses: {data}")
             data = data.encode()
             self.send(address, data)
 
     def forward(self, address, data): 
-        print(f"forward: {address}")
-        print(f"forward: {data}")
         data = "U" + data
         data = data.encode()
         other_user = self.users[address]["peer"]
+
+        print(f"forward: from {address} to {other_user}")
+        print(f"forward: {data}")
+
         if other_user:
             self.send(other_user, data)
         else:
@@ -196,28 +203,31 @@ class Turn(UDPServer):
 
     def connect_user(self, address, data):
 
-        responses = None
+        responses = []
 
         try:
             request = deserialize(data)
         except:
-            raise NotJsonFormat
+            responses.append((address, serialize({"response": "error", "reason": NotJsonFormat.reason})))
+            return responses
 
         if not request.get("request"):
-            raise InvalidRequest
+            responses.append((address, serialize({"response": "error", "reason": InvalidRequest.reason})))
+            return responses
 
         if request["request"] == "connect":
             if not request.get("id") or not request.get("password"):
-                raise InvalidRequest
+                responses.append((address, serialize({"response": "error", "reason": InvalidRequest.reason})))
+                return responses
 
             try:
                 other_user = self.find_other_user(address, request["id"], request["password"])
-            
                 if other_user:
                     # Adding the user with peer : other_user
                     self.users[address] = {"ttl" : USER_TTL_MESSAGES, "peer" : other_user}
+                    self.users[other_user]["peer"] = address
                     responses.append((address, serialize({"response": "success", "waiting": False})))
-                    responses.append((other_user, serialize({"response": "info", "type": "connected"})))
+                    responses.append((other_user, serialize({"response": "info", "type": "connected"}))) #TODO FIX DIS
                 else:
                     # Adding the user with peer : None
                     self.users[address] = {"ttl" : USER_TTL_MESSAGES, "peer" : None}
@@ -228,7 +238,7 @@ class Turn(UDPServer):
                 self.users[address] = {"ttl" : USER_TTL_MESSAGES, "peer" : None}
                 responses.append((address, serialize({"response": "success", "waiting": True})))
 
-            except (InvalidRequest, NoMeetingID, NotJsonFormat, WrongPassword) as e:
+            except (NoMeetingID, NotJsonFormat, WrongPassword) as e:
                 # Catches the exceptions from find_other_user and sends them to the user
                 responses.append((address, serialize({"response": "error", "reason": e.reason})))
 
@@ -236,8 +246,8 @@ class Turn(UDPServer):
                 # If something happend and i dont know what, tell the user unknown error
                 # An unknown error has occurred
                 print("CRITICAL: An unknown error has occurred.")
-                print("Client: {}:{}".format(address[0], address[1]))
-                print("Message: {}".format(data.decode()))
+                print(f"Client: {address[0]}:{address[1]}")
+                print(f"Message: {data}")
                 print(traceback.format_exc())
 
                 responses.append((address, serialize({"response": "error", "reason" : "Unknown error occured"})))
@@ -266,18 +276,18 @@ class Turn(UDPServer):
                     try:
                         # If we received a message from the user, they're alive.
                         self.users[address]["ttl"] = USER_TTL_MESSAGES
-
-                        print(f"run, users {self.users}")
-                        print(f"run, responses {responses}")
                         
                     except:
-                        responses = self.connect_user()
+                        # If they are not in the database, connect them.
+                        responses = self.connect_user(address, data)
 
                     print(f"[{address[0]}:{address[1]}] {data}")
+                    
+                    print(f"run: {self.users}, {self.connections}")
 
                     if responses:
-                        # TODO create self.handle_responses(responses)
-                        pass # return responses.
+                        self.handle_responses(responses)
+                        responses = []
 
                     elif data == "HEARTBEAT": 
                         # If the message is heartbeat, we don't need to do anything, we already updated the TTL
@@ -287,9 +297,9 @@ class Turn(UDPServer):
                         try:
                             self.forward(address, data)
                         except OtherUserNotConnected as e:
-                            responses.append(address, serialize({"response": "error", "reason": e.reason}))))
-                            # TODO create self.handle_responses(responses)
-                            pass # return responses.
+                            responses.append((address, serialize({"response": "error", "reason": e.reason})))
+                            self.handle_responses(responses)
+                            responses = []
 
                 except BlockingIOError:
                     pass
