@@ -7,6 +7,7 @@ from json import loads as deserialize, dumps as serialize
 from database.redisdb import RedisDictDB
 
 import traceback
+import ast
 
 
 SERVER_PORT = 3479 # The TURN port except for the last number  - https://www.3cx.com/blog/voip-howto/stun-voip-1/
@@ -102,8 +103,8 @@ class Turn(UDPServer):
             raise WrongPassword
 
         # Checking if if there is only 1 user in the meeting
-
-        if len(meeting["participants"]) != 2:
+        # The meeting["patricipants"] is for some reason a string so we need to turn it into a list.
+        if len(ast.literal_eval(meeting["participants"])) != 2:
             raise AloneInMeeting
 
 
