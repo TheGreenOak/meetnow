@@ -102,9 +102,8 @@ class Turn(UDPServer):
             raise WrongPassword
 
         # Checking if if there is only 1 user in the meeting
-        try:
-            meeting["participants"][1]
-        except:
+
+        if len(meeting["participants"]) != 2:
             raise AloneInMeeting
 
 
@@ -258,13 +257,8 @@ class Turn(UDPServer):
                     # Adding the user with peer : None
                     self.users[address] = {"ttl" : USER_TTL_MESSAGES, "peer" : None}
                     responses.append((address, serialize({"response": "success", "waiting": True})))
-                
-            except AloneInMeeting:
-                # Adding the user because the ID and passwords are correct but no one is in the meeting
-                self.users[address] = {"ttl" : USER_TTL_MESSAGES, "peer" : None}
-                responses.append((address, serialize({"response": "success", "waiting": True})))
-
-            except (NoMeetingID, NotJsonFormat, WrongPassword, MeetingFull) as e:
+            
+            except (NoMeetingID, NotJsonFormat, WrongPassword, MeetingFull, AloneInMeeting) as e:
                 # Catches the exceptions from find_other_user and sends them to the user
                 responses.append((address, serialize({"response": "error", "reason": e.reason})))
 
