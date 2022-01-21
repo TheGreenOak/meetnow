@@ -8,6 +8,7 @@ from database.redisdb import RedisDictDB
 
 import traceback
 
+
 SERVER_PORT = 3479 # The TURN port except for the last number  - https://www.3cx.com/blog/voip-howto/stun-voip-1/
 MINUTE = 60
 USER_TTL_MESSAGES = 2
@@ -15,23 +16,26 @@ USER_TTL_MESSAGES = 2
 NOT_FOUND_USER_YET = 0
 OTHER_USER_NOT_CONNECTED = 1
 
+class MeetingFull(Exception):
+    reason = "Meeting is full."
+
 class NotJsonFormat(Exception):
     reason = "Request not in JSON format."
 
 class NoMeetingID(Exception):
-    reason = "No meeting ID found"
+    reason = "No meeting ID found."
 
 class WrongPassword(Exception):
-    reason = "Wrong meeting password"
+    reason = "Wrong meeting password."
 
 class InvalidRequest(Exception):
-    reason = "Invalid request"
+    reason = "Invalid request."
 
 class AloneInMeeting(Exception):
-    reason = "You're alone in this meeting"
+    reason = "You're alone in this meeting."
 
 class OtherUserNotConnected(Exception):
-    reason = "The other user is not connected yet"
+    reason = "The other user is not connected yet."
 
 class ForwardMessage(Exception):
     pass
@@ -87,11 +91,13 @@ class Turn(UDPServer):
         # Checking if the meeting ID is existing
         try:
             meeting = self.public_db[meeting_id]
+            if not meeting:
+                raise NoMeetingID
         except:
             raise NoMeetingID
         
         # Checking if the password is correct
-        if meeting["password"] != password:  
+        if meeting.get("password") != password:  
             raise WrongPassword
 
         # Checking if if there is only 1 user in the meeting
@@ -103,15 +109,14 @@ class Turn(UDPServer):
 
         # If there are two users in the database, find out which one is the other user
         try:
-            both_users = self.connections[meeting_id] # TODO: check if there are actually two users
-            if len(both_users) == 1:
+            both_users = self.connections[meeting_id]
+            if len(both_users) == 1: # If there is only one user, go to the except below this try
                 raise Exception
-            print(f"akdsjlkadjflkajdfkajsdlkajsdlfkjasdkfjalksdfjlkasjflkasdfklasdjf {both_users}")
-            if address == both_users[1]:
-                return both_users[0]
-            return both_users[1]
+            raise MeetingFull
 
         # If it exists, add this user and send the other one
+        except MeetingFull:
+            raise MeetingFull
         except:
             if self.connections.get(meeting_id):
                 self.connections[meeting_id].append(address)
@@ -121,18 +126,15 @@ class Turn(UDPServer):
                 return None
 
 
-    def handle_responses(self, responses): ############ TODO: test this
+    def handle_responses(self, responses):
         
         addresses = [address[0] for address in responses]
         data_to_send = [data[1] for data in responses]
 
-        print(addresses)
         for i in range(len(addresses)):
 
             address = addresses[i]
             data = "S" + data_to_send[i]
-            print(f"forward handle_responses: {address}")
-            print(f"forward handle_responses: {data}")
             data = data.encode()
             self.send(address, data)
 
@@ -140,9 +142,6 @@ class Turn(UDPServer):
         data = "U" + data
         data = data.encode()
         other_user = self.users[address]["peer"]
-
-        print(f"forward: from {address} to {other_user}")
-        print(f"forward: {data}")
 
         if other_user:
             self.send(other_user, data)
@@ -221,7 +220,7 @@ class Turn(UDPServer):
                 return responses
 
             try:
-                other_user = self.find_other_user(address, request["id"], request["password"])
+                other_user = self.find_other_user(address, request.get("id"), request.get("password"))
                 if other_user:
                     # Adding the user with peer : other_user
                     self.users[address] = {"ttl" : USER_TTL_MESSAGES, "peer" : other_user}
@@ -238,7 +237,7 @@ class Turn(UDPServer):
                 self.users[address] = {"ttl" : USER_TTL_MESSAGES, "peer" : None}
                 responses.append((address, serialize({"response": "success", "waiting": True})))
 
-            except (NoMeetingID, NotJsonFormat, WrongPassword) as e:
+            except (NoMeetingID, NotJsonFormat, WrongPassword, MeetingFull) as e:
                 # Catches the exceptions from find_other_user and sends them to the user
                 responses.append((address, serialize({"response": "error", "reason": e.reason})))
 
@@ -282,8 +281,6 @@ class Turn(UDPServer):
                         responses = self.connect_user(address, data)
 
                     print(f"[{address[0]}:{address[1]}] {data}")
-                    
-                    print(f"run: {self.users}, {self.connections}")
 
                     if responses:
                         self.handle_responses(responses)
