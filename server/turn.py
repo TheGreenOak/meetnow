@@ -13,9 +13,6 @@ SERVER_PORT = 3479 # The TURN port except for the last number  - https://www.3cx
 MINUTE = 60
 USER_TTL_MESSAGES = 2
 
-NOT_FOUND_USER_YET = 0
-OTHER_USER_NOT_CONNECTED = 1
-
 class MeetingFull(Exception):
     reason = "Meeting is full."
 
@@ -37,27 +34,22 @@ class AloneInMeeting(Exception):
 class OtherUserNotConnected(Exception):
     reason = "The other user is not connected yet."
 
-class ForwardMessage(Exception):
-    pass
-
 
 class Turn(UDPServer):
     """
-    The TURN server is responsible for connecting two users that can't communicate through P2P.
-    [ SERVER INFORMATION ] # TODO change this
-    The ICE (Internet Connectivity Establishment) server is responsible for temporarily connecting
-    both clients, and transporting ICE messages between them. This is done so that the clients
-    will be able communicate with each other by synchronizing communication ports and IP addresses.
+    [ SERVER INFORMATION ]
+    The TURN (Traversal Using Relays around NAT) server is responsible for connecting
+    both clients, and forwarding messages between them. This is done so that the clients
+    will be able communicate with each other by when their NAT doesn't allow P2P communication.
 
-    [ DATABASE INFORMATION ] # TODO chang this
-    The ICE server maintains two internal databases, and has read access for the public one.
-    The two internal databases are used mainly for checking request validity.
+    [ DATABASE INFORMATION ]
+    The TURN server maintains two internal databases, and has read access for the public one.
+    The two internal databases are used mainly for checking request validity and to know where to forward the messages.
 
     [self.users]
     (ip, port): {
         ttl: int,
         peer: (other ip, other port),
-        id: str [optional]???
     }
 
     [self.connections]
@@ -74,20 +66,29 @@ class Turn(UDPServer):
     def __init__(self, port, public_db):
         super().__init__(port)
 
+        # Setup the databases needed
+        self.users = {}
         self.connections = {}
                 
-        self.users = {}
-                # example of how the database looks:
-                # ("127.0.0.1", 1337) : {"ttl": 2, meeting_id : 3456324, "peer" : ("128.0.0.1", 42069)},
-                # ("128.0.0.1", 42069) : {"ttl": 2, meeting_id : 3456324, "peer" : ("127.0.0.1", 1337)}}
-                # both of these users are in the same meeting and therefore they have each others "peers"
+        self.public_db = public_db
 
         self.expiry_stopper = Event()
-
-        self.public_db = public_db
         
 
     def find_other_user(self, address, meeting_id, password):
+        """
+        This method cheks the validity of the data sent by the user and connects him to the connections meeting.
+        Then the method finds the other user and returns it.
+        
+        Parameters:
+        address (tuple of str and list): The address of the user.
+        meeting_id (int): The meeting ID sent by the user.
+        password (str): The password sent by the user.
+
+        Returns:
+        tuple | none: The other user in the public meeting.
+
+        """
         # Checking if the meeting ID is existing
         try:
             meeting = self.public_db[meeting_id]
@@ -107,16 +108,16 @@ class Turn(UDPServer):
             raise AloneInMeeting
 
 
-        # If there are two users in the database, find out which one is the other user
+        # If there are two users in the public database, check how much users are in the connections meeting
         try:
             both_users = self.connections[meeting_id]
             if len(both_users) == 1: # If there is only one user, go to the except below this try
                 raise Exception
-            raise MeetingFull
+            raise MeetingFull # Else, the connections meeting is full and a third user is trying to connect
 
-        # If it exists, add this user and send the other one
-        except MeetingFull:
+        except MeetingFull: # Send the MeetingFull excepting to the connect_user function to handle
             raise MeetingFull
+        # If the connections meeting exsit, add this user and send the other one
         except:
             if self.connections.get(meeting_id):
                 self.connections[meeting_id].append(address)
@@ -127,10 +128,19 @@ class Turn(UDPServer):
 
 
     def handle_responses(self, responses):
-        
+        """
+        This method puts the addresses in a list and the data in a differant list.
+        then it send the data to the matching addresses.
+        the responses are always server messages in a JSON format.
+
+        Parameters:
+        responses (list of tuples of string and string): A list of tuples made of the address to send to and the data.
+        """
+        # Getting all the addresses to a list and the data to send to a differant list
         addresses = [address[0] for address in responses]
         data_to_send = [data[1] for data in responses]
 
+        # Sending all of the data
         for i in range(len(addresses)):
 
             address = addresses[i]
@@ -138,7 +148,14 @@ class Turn(UDPServer):
             data = data.encode()
             self.send(address, data)
 
-    def forward(self, address, data): 
+    def forward(self, address, data):
+        """
+        The method forwards the data sent from one user to the other in the same meeting.
+
+        Parameters:
+        address (tuple of str and int): The address of the user to send to.
+        data (str): The data to forward.
+        """
         data = "U" + data
         data = data.encode()
         other_user = self.users[address]["peer"]
@@ -176,44 +193,54 @@ class Turn(UDPServer):
 
     def disconnect_client(self, address):
         """
-        This method is responsible for removing a client from the database, and disconnecting their socket.
+        This method is responsible for removing a client from the database, and sending a message to the other user.
 
         No checks are performed to ensure that the client is in the database.
         Call this method only after checking that the client is in the database.
 
-        address (tuple): Address tuple or other unique identifier.
-
-        returns: tuple | None: The message that needs to be sent to the socket (both in tuple).
+        Parameters:
+        address (tuple of str and int): The address of the user that is supposesd to be deleted.
         """
 
         # Setup temporary variables
         user = self.users[address]
-        second_user = None
-
-        # If the user disconnects in a meeting, remove them from the meeting
-        if user.get("id"):
-            second_user = self.disconnect_peer(address)
+        other_user = user["peer"]
         
         del self.users[address]
 
-        if second_user:
-            return (second_user, serialize({"response": "info", "type": "left"}))
+        # Telling the other user that the user has been disconnected
+        if other_user:
+            self.handle_responses([(other_user, serialize({"response": "info", "type": "left"}))])
 
 
     def connect_user(self, address, data):
+        """
+        This method makes sure the connect request is sent by the format and connects the user to the database.
+        It check if the other user is connect too and sends him an update that the other user is connected.
+
+        Parameters:
+        address (tuple of str and int): The address of the user that wants to connect.
+        data (str): The data the user has sent.
+
+        Returns:
+        responses: A list of responses that need to be sent to the users. 
+        """
 
         responses = []
 
+        # Checking if the message is in the JSON format
         try:
             request = deserialize(data)
         except:
             responses.append((address, serialize({"response": "error", "reason": NotJsonFormat.reason})))
             return responses
 
+        # Checking if the message is not a request
         if not request.get("request"):
             responses.append((address, serialize({"response": "error", "reason": InvalidRequest.reason})))
             return responses
 
+        # Checking if there is a meeting ID and password sent
         if request["request"] == "connect":
             if not request.get("id") or not request.get("password"):
                 responses.append((address, serialize({"response": "error", "reason": InvalidRequest.reason})))
@@ -226,7 +253,7 @@ class Turn(UDPServer):
                     self.users[address] = {"ttl" : USER_TTL_MESSAGES, "peer" : other_user}
                     self.users[other_user]["peer"] = address
                     responses.append((address, serialize({"response": "success", "waiting": False})))
-                    responses.append((other_user, serialize({"response": "info", "type": "connected"}))) #TODO FIX DIS
+                    responses.append((other_user, serialize({"response": "info", "type": "connected"})))
                 else:
                     # Adding the user with peer : None
                     self.users[address] = {"ttl" : USER_TTL_MESSAGES, "peer" : None}
@@ -282,15 +309,17 @@ class Turn(UDPServer):
 
                     print(f"[{address[0]}:{address[1]}] {data}")
 
+                    # If there are responses that supposed to be sent, send them.
                     if responses:
                         self.handle_responses(responses)
                         responses = []
 
                     elif data == "HEARTBEAT": 
-                        # If the message is heartbeat, we don't need to do anything, we already updated the TTL
+                        # If the message is heartbeat, we don't need to do anything, we already updated the TTL.
                         pass
                     
                     else:
+                        # If the user is connected, and is not "HEARTBEAT" forward it to the other user
                         try:
                             self.forward(address, data)
                         except OtherUserNotConnected as e:
@@ -329,69 +358,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-    """
-    def handle_message(self, address, data):
-
-        responses = []
-
-        try:
-            if data == "HEARTBEAT":
-                return [] # No need to return a message
-
-            try:
-                self.users[address]
-                try:# TODO fix dis cod
-                    request = deserialize(data)
-                    if type(request) is not dict: # Then the message if for the other user and should be forwarded
-                        try:
-                            other_address = self.users[address]["peer"]
-                            raise ForwardMessage
-                        except:
-                            data = serialize({"response": "error", "reason": "Other user not connected."})
-                        
-                        self.return_exception(address, data)
-                except:
-                    raise ForwardMessage 
-            except:
-                data = serialize({"response": "error", "reason": "Connect to the TURN server first with ID and Password."})
-                return responses
-
-
-            if not request.get("request"):
-                raise InvalidRequest
-
-            if request["request"] == "connect":
-                if not request.get("id") or not request.get("password"):
-                    raise InvalidRequest
-            
-                try:
-                    other_user = self.find_other_user(address, request["id"], request["password"])
-                
-                    if other_user:
-                        responses.append((address, serialize({"response": "success", "waiting": False})))
-                        responses.append((other_user, serialize({"response": "info", "type": "connected"})))
-                    else:
-                        responses.append((address, serialize({"response": "success", "waiting": True})))
-                except AloneInMeeting:
-                    responses.append((address, serialize({"response": "success", "waiting": True})))
-
-            else:
-                raise InvalidRequest
-
-        except ForwardMessage:
-            self.forward(address, responses)
-
-        except Exception as e:
-            #try:
-            responses.append((address, serialize({"response": "error", "reason": e.reason})))
-            #except:
-                #responses.append((address, serialize({"response": "error", "reason" : "Unknown error occured"})))
-        
-        return responses
-"""
