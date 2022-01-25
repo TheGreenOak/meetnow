@@ -38,7 +38,12 @@ unsigned char* encode(unsigned char* pixels, unsigned char* previousFrame, unsig
         return encoded;
     }
 
-    for (currPixel = 0; currPixel < height * width; currPixel += CHANNELS) {
+    // Clear out the encoded array
+    for (unsigned int i = 0; i < height * width * sizeof(int); i++) {
+        encoded[i] = 0;
+    }
+
+    for (currPixel = 0; currPixel < height * width * CHANNELS; currPixel += CHANNELS) {
         
         // Setup the pixels
         for (int i = 0; i < CHANNELS; i++) {
@@ -53,7 +58,7 @@ unsigned char* encode(unsigned char* pixels, unsigned char* previousFrame, unsig
 
             // Check if we reached the max save value
             if (((int*)encoded)[counter] == MAX_SAVED) {
-                counter += sizeof(int);
+                counter++;
             }
 
             // Keep old pixel
@@ -65,27 +70,26 @@ unsigned char* encode(unsigned char* pixels, unsigned char* previousFrame, unsig
 
             // We don't want to override the saved pixels
             if (previouslySaved) {
-                counter += sizeof(int);
+                counter++;
                 previouslySaved = false;
             }
 
-            encoded[counter + CHANNELS] = 0;
+            encoded[counter * sizeof(int) + CHANNELS] = 0;
             for (int i = 0; i < CHANNELS; i++) {
-                encoded[counter + CHANNELS - i - 1] = pixel[i];
+                encoded[counter * sizeof(int) + CHANNELS - i - 1] = pixel[i];
             }
 
-            counter += sizeof(int);
+            counter++;
         }
     }
 
-    std::cout << "Number of ints stored: " << counter;
     return encoded;
 }
 
 unsigned char* decode(unsigned char* pixels, unsigned char* previousFrame, unsigned short height, unsigned short width) {
     unsigned char* decoded = new unsigned char[height * width * CHANNELS];
     unsigned int i = 0, currPixel = 0, currBlock = 0;
-    unsigned int amountOfPixels = height * width;
+    unsigned int amountOfPixels = height * width * CHANNELS;
 
     while (currPixel < amountOfPixels) {
         currBlock = ((unsigned int*)pixels)[i];
@@ -94,17 +98,18 @@ unsigned char* decode(unsigned char* pixels, unsigned char* previousFrame, unsig
         if ((currBlock & SAVE_BIT) != 0) {
             currBlock = (currBlock & MAX_SAVED);
 
-            for (int j = 0; j < currBlock * CHANNELS; j++) {
+            for (unsigned int j = 0; j < currBlock * CHANNELS; j++) {
                 decoded[currPixel] = previousFrame[currPixel++];
             }
         } else {
-            for (int bit = 0; bit < CHANNELS; bit++) {
-                decoded[currPixel++] = (unsigned char) ((currBlock >> (BYTE_SIZE * bit + BYTE_SIZE)) & BYTE);
+            for (int bit = CHANNELS - 1; bit >= 0; bit--) {
+                decoded[currPixel++] = ((currBlock >> (BYTE_SIZE * bit)) & BYTE);
             }
         }
 
         i++;
     }
 
+    std::cout << "Decoded " << i << " blocks" << std::endl;
     return decoded;
 }

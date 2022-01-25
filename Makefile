@@ -3,7 +3,7 @@
 # Variables
 COMPILER    = g++
 CPP_FLAGS   = -Wall -g --debug
-SOURCE_DIR  = src/**
+SOURCE_DIR  = src/**.cpp
 INCLUDES    = -I/usr/include/opencv4 -Iinclude
 OPENCV_FIX  = $$(pkg-config opencv4 --libs --cflags)
 OUT_DIR     = bin
