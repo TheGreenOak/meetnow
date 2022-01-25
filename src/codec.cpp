@@ -2,7 +2,8 @@
 #include <iostream>
 
 #define CHANNELS   3
-#define BYTE 0xFF
+#define BYTE       0xFF
+#define BYTE_SIZE  8
 #define MAX_SAVED  0xFFFFFF
 #define SAVE_BIT   0x1000000 // (1 << 24)
 
@@ -37,10 +38,6 @@ unsigned char* encode(unsigned char* pixels, unsigned char* previousFrame, unsig
         return encoded;
     }
 
-    for (unsigned int i = 0; i < height * width; i++) {
-        ((int*)encoded)[i] = 0;
-    }
-
     for (currPixel = 0; currPixel < height * width; currPixel += CHANNELS) {
         
         // Setup the pixels
@@ -60,7 +57,7 @@ unsigned char* encode(unsigned char* pixels, unsigned char* previousFrame, unsig
             }
 
             // Keep old pixel
-            ((int*)encoded)[counter] = ((int*)encoded)[counter] | SAVE_BIT; // Indiciate existing information
+            ((int*)encoded)[counter] = (((int*)encoded)[counter] | SAVE_BIT); // Indiciate existing information
             ((int*)encoded)[counter]++;
             previouslySaved = true;
 
@@ -97,12 +94,12 @@ unsigned char* decode(unsigned char* pixels, unsigned char* previousFrame, unsig
         if ((currBlock & SAVE_BIT) != 0) {
             currBlock = (currBlock & MAX_SAVED);
 
-            for (currPixel; currPixel < currBlock * CHANNELS; currPixel++) {
-                decoded[currPixel] = previousFrame[currPixel];
+            for (int j = 0; j < currBlock * CHANNELS; j++) {
+                decoded[currPixel] = previousFrame[currPixel++];
             }
         } else {
             for (int bit = 0; bit < CHANNELS; bit++) {
-                decoded[currPixel++] = (char) ((currBlock >> (sizeof(char) * bit)) & BYTE);
+                decoded[currPixel++] = (unsigned char) ((currBlock >> (BYTE_SIZE * bit + BYTE_SIZE)) & BYTE);
             }
         }
 
