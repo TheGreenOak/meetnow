@@ -99,7 +99,7 @@ unsigned char* decode(unsigned char* pixels, unsigned char* previousFrame, unsig
             currBlock = (currBlock & MAX_SAVED);
 
             for (unsigned int j = 0; j < currBlock * CHANNELS; j++) {
-                decoded[currPixel] = previousFrame[currPixel++];
+                decoded[currPixel] = previousFrame[currPixel++ + 1];
             }
         } else {
             for (int bit = CHANNELS - 1; bit >= 0; bit--) {

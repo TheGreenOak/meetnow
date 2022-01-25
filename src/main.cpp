@@ -1,4 +1,4 @@
-#include "test/test1.cpp"
+#include "test/test2.cpp"
 
 int main() {
     test();

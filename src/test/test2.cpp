@@ -26,7 +26,7 @@ int test() {
     while (true) {
         cap >> currFrame;
 
-        auto encoded = encode(currFrame.data, prevFrame, HEIGHT, WIDTH, 1);
+        auto encoded = encode(currFrame.data, prevFrame, HEIGHT, WIDTH, 20);
         prevFrame = decode(encoded, prevFrame, HEIGHT, WIDTH);
         cv::imshow("TEST", cv::Mat(HEIGHT, WIDTH, CV_8UC3, prevFrame));
         cv::waitKey(30);
