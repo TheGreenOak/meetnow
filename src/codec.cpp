@@ -24,7 +24,7 @@ unsigned char* encode(unsigned char* pixels, unsigned char* previousFrame, unsig
     unsigned char* encoded = ((unsigned char*)new unsigned int[height * width]);
 
     unsigned int counter = 0, currPixel = 0;
-    bool previouslySaved = false;
+    bool previouslySaved = false, isSimilar = false;
 
     if (previousFrame == nullptr) { // If there's no previous frame, don't process.
         for (int i = 0; currPixel < height * width * CHANNELS; i += sizeof(int)) {
@@ -51,10 +51,15 @@ unsigned char* encode(unsigned char* pixels, unsigned char* previousFrame, unsig
             previousPixel[i] = previousFrame[currPixel + i];
         }
 
+        isSimilar = true;
+        for (int i = 0; i < CHANNELS; i++) {
+            if (abs((char)pixel[i] - (char)previousPixel[i]) > threshold) {
+                isSimilar = false;
+            }
+        }
+
         // Check if the pixels are similar
-        if ((pixel[0] - previousPixel[0] <= threshold || pixel[0] - previousPixel[0] >= ((unsigned char)-threshold))
-        &&  (pixel[1] - previousPixel[1] <= threshold || pixel[1] - previousPixel[1] >= ((unsigned char)-threshold))
-        &&  (pixel[2] - previousPixel[2] <= threshold || pixel[2] - previousPixel[2] >= ((unsigned char)-threshold))) {
+        if (isSimilar) {
 
             // Check if we reached the max save value
             if (((int*)encoded)[counter] == MAX_SAVED) {
@@ -99,7 +104,8 @@ unsigned char* decode(unsigned char* pixels, unsigned char* previousFrame, unsig
             currBlock = (currBlock & MAX_SAVED);
 
             for (unsigned int j = 0; j < currBlock * CHANNELS; j++) {
-                decoded[currPixel] = previousFrame[currPixel++ + 1];
+                decoded[currPixel] = previousFrame[currPixel];
+                currPixel++;
             }
         } else {
             for (int bit = CHANNELS - 1; bit >= 0; bit--) {
@@ -110,6 +116,5 @@ unsigned char* decode(unsigned char* pixels, unsigned char* previousFrame, unsig
         i++;
     }
 
-    std::cout << "Decoded " << i << " blocks" << std::endl;
     return decoded;
 }
