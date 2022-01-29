@@ -1,7 +1,13 @@
 <script lang="ts">
+    export let height: number = 848;
+    export let width: number = 480;
+
     let videoSource = null;
     const videoStream = navigator.mediaDevices.getUserMedia({
-        video: true
+        video: {
+            width: { ideal: width },
+            height: { ideal: height }
+        }
     });
 
     videoStream.then((stream) => {
