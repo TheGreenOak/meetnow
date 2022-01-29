@@ -1,0 +1,40 @@
+{
+  "name": "meetnow",
+  "description": "An open source, peer-to-peer video calling service alternative to Zoom.",
+  "author": "MeetNow Team <meetnow@yeho.dev> (https://meetnow.yeho.dev)",
+  "contributors": [
+    "Yehonatan Rosenblatt <meetnow@yeho.dev> (https://yeho.dev)",
+    "Alon Green <alongreenalgr@gmail.com>"
+  ],
+  "version": "0.0.1",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c -w",
+    "start": "electron .",
+    "dist": "yarn build && electron-builder",
+    "check": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^17.0.0",
+    "@rollup/plugin-node-resolve": "^11.0.0",
+    "@rollup/plugin-typescript": "^8.0.0",
+    "@tsconfig/svelte": "^2.0.0",
+    "rollup": "^2.3.4",
+    "rollup-plugin-css-only": "^3.1.0",
+    "rollup-plugin-livereload": "^2.0.0",
+    "rollup-plugin-svelte": "^7.0.0",
+    "rollup-plugin-terser": "^7.0.0",
+    "svelte": "^3.0.0",
+    "svelte-check": "^2.0.0",
+    "svelte-preprocess": "^4.0.0",
+    "tslib": "^2.0.0",
+    "typescript": "^4.0.0",
+    "electron": "^16.0.8",
+    "electron-builder": "^22.14.5"
+  },
+  "dependencies": {
+    "sirv-cli": "^2.0.0"
+  }
+}
