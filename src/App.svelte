@@ -1,5 +1,12 @@
 <script lang="ts">
+	import type { Socket } from 'net';
+
+	export let signalingSocket: Socket;
+	export let iceSocket: Socket;
+
 	import Webcam from "./components/Webcam.svelte";
+
+	signalingSocket.connect(5060);
 
 	let webcamOn: boolean = false;
 

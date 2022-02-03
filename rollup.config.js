@@ -33,6 +33,9 @@ function serve() {
 export default {
 	input: 'src/main.ts',
 	output: {
+		globals: {
+			net: 'net'
+		},
 		sourcemap: true,
 		format: 'iife',
 		name: 'app',
@@ -56,7 +59,7 @@ export default {
 		// consult the documentation for details:
 		// https://github.com/rollup/plugins/tree/master/packages/commonjs
 		resolve({
-			browser: true,
+			browser: false,
 			dedupe: ['svelte']
 		}),
 		commonjs(),
