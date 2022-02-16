@@ -9,4 +9,6 @@ Build: `yarn build`
 
 Start: `yarn start`
 
+Develop: `yarn dev`
+
 Distribute: `yarn dist`
