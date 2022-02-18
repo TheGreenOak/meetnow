@@ -9,8 +9,15 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "build": "rollup -c",
+    "build": "tsc -p src/electron & rollup -c",
     "dev": "tsc -w -p src/electron & rollup -c -w",
+
+    "build-svelte": "rollup -c",
+    "build-electron": "tsc -p src/electron",
+    
+    "dev-svelte": "rollup -c -w",
+    "dev-electron": "tsc -w -p src/electron",
+
     "start": "electron public/build/main.js",
     "dist": "yarn build && electron-builder",
     "check": "svelte-check --tsconfig ./tsconfig.json"
