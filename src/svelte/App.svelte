@@ -4,17 +4,26 @@
 
 	let webcamOn: boolean = false;
 	let micOn: boolean = false;
+	let cam: Webcam = null;
+	let mic: Microphone = null;
 
 	function toggleWebcam() {
 		webcamOn = webcamOn ? false : true;
+		if(!webcamOn) {
+			cam.turnOff()
+		}
+	}
 	function toggleMicrophone() {
 		micOn = micOn ? false : true;
+		if(!micOn) {
+			mic.turnOff()
+		}
 	}
 </script>
 
 <main>
 	{#if webcamOn}
-		<Webcam height={720} width={1280} />
+		<Webcam bind:this={cam} height={720} width={1280}/>
 	{:else}
 		<h1>Webcam turned off</h1>
 	{/if}
