@@ -31,7 +31,7 @@
 	<button class={webcamOn ? "webcam-on" : ""} on:click={toggleWebcam}>[{webcamOn ? "(c)ON" : "(c)OFF"}]</button>
 
 	{#if micOn}
-		<Microphone/>
+		<Microphone bind:this={mic}/>
 	{:else}
 		<h1>Microphone turned off</h1>
 	{/if}
