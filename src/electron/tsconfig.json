@@ -1,0 +1,15 @@
+{
+  "include": ["**/*"],
+  "compilerOptions": {
+    "module": "commonjs", //CommonJS is required in order for Electron to work properly
+
+    "target": "ESNext",
+    "baseUrl": "../../", // Node modules exists 2 directories up
+    "moduleResolution": "node",
+    "importsNotUsedAsValues": "error",
+    "strict": true,
+    "esModuleInterop": true,
+
+    "outDir": "../../public/build/"
+  }
+}

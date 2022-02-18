@@ -10,8 +10,8 @@
   "private": true,
   "scripts": {
     "build": "rollup -c",
-    "dev": "rollup -c -w",
-    "start": "electron .",
+    "dev": "tsc -w -p src/electron & rollup -c -w",
+    "start": "electron public/build/main.js",
     "dist": "yarn build && electron-builder",
     "check": "svelte-check --tsconfig ./tsconfig.json"
   },
@@ -20,7 +20,7 @@
     "@rollup/plugin-node-resolve": "^11.0.0",
     "@rollup/plugin-typescript": "^8.0.0",
     "@tsconfig/svelte": "^2.0.0",
-    "electron": "^16.0.8",
+    "electron": "17.0.1",
     "electron-builder": "^22.14.5",
     "rollup": "^2.3.4",
     "rollup-plugin-css-only": "^3.1.0",

@@ -1,14 +1,11 @@
-const net = require('net');
-const { contextBridge, ipcRenderer } = require('electron');
+import net from "net";
+import { contextBridge } from "electron";
 
 let sock = new net.Socket();
 
 contextBridge.exposeInMainWorld("nodejs", {
     myTest: test
 });
-
-console.log(sock);
-console.log(typeof(sock));
 
 function test() {
   sock.connect(5060, "127.0.0.1");

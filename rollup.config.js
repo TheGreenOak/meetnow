@@ -31,7 +31,7 @@ function serve() {
 }
 
 export default {
-	input: 'src/main.ts',
+	input: 'src/svelte/main.ts',
 	output: {
 		globals: {
 			net: 'net'
