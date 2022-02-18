@@ -7,6 +7,7 @@
     "Alon Green <alongreenalgr@gmail.com>"
   ],
   "version": "0.0.1",
+  "main": "public/build/main.js",
   "private": true,
   "scripts": {
     "build": "tsc -p src/electron & rollup -c",
