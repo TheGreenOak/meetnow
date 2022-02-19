@@ -1,33 +1,22 @@
-import net from "net";
 import { contextBridge } from "electron";
+import { Networking } from "./backend";
 
-let sock = new net.Socket();
+const net = Networking.getInstance();
 
-contextBridge.exposeInMainWorld("nodejs", {
-    myTest: test
+/*
+What's going on here?
+
+To allow for seamless communication inside of the renderer process,
+we expose basic networking methods that assist the renderer process in handling basic networking.
+
+We only expose abstractions that help the renderer do connections. We never expose raw sockets,
+since they're useless either way, considering the Renderer process can't make use of them.
+*/
+contextBridge.exposeInMainWorld("networking", {
+    start: net.start,
+    join: net.join,
+    leave: net.leave,
+    getIP: net.getIP,
+    negotiateConnection: net.negotiateConnection,
+    send: net.send
 });
-
-function test() {
-  sock.connect(5060, "127.0.0.1");
-
-  sock.on("data", (data) => {
-    console.log(data.toString());
-  });
-
-  sock.on("error", (err) => {
-    console.error(err);
-  });
-
-  sock.write('{"request": "end"}');
-
-  setTimeout(() => { sock.destroy(); }, 500);
-
-  setTimeout(() => {
-    sock.connect(5060, "127.0.0.1");
-    sock.write('{"request": "end"}');
-
-    setTimeout(() => { sock.destroy(); }, 500);
-  }, 1000);
-
-  console.log("Test");
-}

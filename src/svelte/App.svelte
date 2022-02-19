@@ -1,6 +1,12 @@
 <script lang="ts">
+	import type { Networking } from "../electron/backend";
 	import Webcam from "./components/Webcam.svelte";
 	import Microphone from "./components/Microphone.svelte";
+
+	// We cast window as any to avoid getting a TypeScript error.
+	// This is usually dangerous, however, we know window does have the networking attribute from Electron's preload.
+	const net: Networking = (window as any).networking;
+	net.start();
 
 	let webcamOn: boolean = false;
 	let micOn: boolean = false;
