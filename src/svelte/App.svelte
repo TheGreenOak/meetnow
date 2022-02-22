@@ -6,7 +6,6 @@
 	// We cast window as any to avoid getting a TypeScript error.
 	// This is usually dangerous, however, we know window does have the networking attribute from Electron's preload.
 	const net: Networking = (window as any).networking;
-	net.start();
 
 	let webcamOn: boolean = false;
 	let micOn: boolean = false;
@@ -22,7 +21,7 @@
 	function toggleMicrophone() {
 		micOn = micOn ? false : true;
 		if(!micOn) {
-			mic.turnOff()
+			mic.turnOff();
 		}
 	}
 </script>

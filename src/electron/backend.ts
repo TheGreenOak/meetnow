@@ -1,13 +1,45 @@
 import { Socket } from "net";
+import { EventEmitter } from "events";
+
+/*
+yeho's little think box
+-----------------------
+
+maybe create an event emitter for App.svelte to handle
+it will emit stateChange events and such.
+
+for instance, .on("stateChange", (newState) => {
+    if newState is waiting:
+    drop client in a fake meeting, waiting for someone to arrive.
+
+    if newState is connecting:
+    show client the connection is being made
+
+    if newState is connected:
+    unlock send method, and allow for communication
+
+    if newState is disconnected:
+    drop other client
+
+    if newState is ended:
+    drop yourself from the meeting
+});
+
+.on("hostChange", () => {
+    unlock end meeting button.
+});
+*/
 
 /**
- * Singleton class for handling all client-side networking.
+ * Stateful singleton class for handling all client-side networking.
  */
-export class Networking {
+export class Networking extends EventEmitter {
     private static instance?: Networking;
     private signalingSocket?: Socket;
 
-    private constructor() {}
+    private constructor() {
+        super();
+    }
 
     public static getInstance(): Networking {
         if (this.instance == null) {
@@ -17,8 +49,94 @@ export class Networking {
         return this.instance;
     }
 
+    public handleSignalingMessage(data: string) {
+        if (data == "HEARTBEAT") {
+            this.signalingSocket?.write("HEARTBEAT");
+            return; // No need for any further action.
+        }
+
+        let deserialized: SignalingServerResponse = JSON.parse(data);
+
+        if (deserialized.response == "success") {
+            if (deserialized.type == "created") {
+                this.emit("stateChange", {
+                    newState: "started",
+                    id: deserialized.id,
+                    password: deserialized.password
+                });
+            }
+
+            if (deserialized.type == "joined") {
+                if (!deserialized.host) {
+
+                }
+
+                this.emit("stateChange", {
+                    newState: "joined",
+                    me: true,
+                    host: deserialized.host
+                });
+            }
+
+            if (deserialized.type == "switched") {
+                this.emit("hostChange", false); // false indicates the user is no longer the host
+            }
+
+            if (deserialized.type == "left") {
+                this.signalingSocket?.destroy();
+                this.signalingSocket = undefined;
+
+                this.emit("stateChange", {
+                    newState: "left",
+                    me: true
+                });
+            }
+
+            if (deserialized.type == "ended") {
+                this.signalingSocket?.destroy();
+                this.signalingSocket = undefined;
+
+                this.emit("stateChange", {
+                    newState: "ended"
+                });
+            }
+        }
+
+        else if (deserialized.response == "info") {
+            if (deserialized.type == "joined") {
+                // do something about it
+            }
+
+            if (deserialized.type == "switched") {
+                this.emit("hostChange", true); // true indicating the user is the new host
+            }
+
+            if (deserialized.type == "left") {
+                this.emit("stateChange", {
+                    newState: "left",
+                    me: false
+                });
+            }
+
+            if (deserialized.type == "ended") {
+                this.emit("stateChange", {
+                    newState: "ended"
+                });
+            }
+        }
+
+        else if (deserialized.response == "error") {
+            this.emit("error", deserialized?.reason);
+        }
+    }
+
+
+      /////////////////////////////////////////
+     ///        CLIENT-SIDE METHODS        ///
+    /////////////////////////////////////////
+
     /**
-     * Starts a new meeting.
+     * Starts a new meeting, and automatically joins it.
      * Upon improper usage, exceptions will be thrown.
      * 
      * @returns Meeting ID and password, seperated by a semicolon.
@@ -30,10 +148,10 @@ export class Networking {
 
         this.signalingSocket = new Socket();
         this.signalingSocket.connect(5060, "127.0.0.1");
-        this.signalingSocket.write("{\"request\": \"start\"}");
-        this.signalingSocket.on("data", (data) => { console.log(data.toString()); } ); // no worky :(
+        this.signalingSocket.on("data", (data) => handleSignalingMessage(data.toString()));
+        this.signalingSocket.write(JSON.stringify({request: "start"}));
 
-        return ""; // TODO: UNUTILIZED!
+        return "The function has returned. At last!"; // TODO: UNUTILIZED!
     }
 
     /**
@@ -50,6 +168,14 @@ export class Networking {
     }
 
     /**
+     * This method will attempt to switch the meeting's host, thereby granting the other user ending rights.
+     * Upon improper usage, exceptions will be thrown.
+     */
+    public switch(): void {
+        return; // TODO: UNUTILIZED!
+    }
+
+    /**
      * This method will leave a meeting.
      * Upon improper usage, exceptions will be thrown.
      */
@@ -58,28 +184,16 @@ export class Networking {
     }
 
     /**
-     * This method will fetch the user's public IP address via the STUN service.
-     * 
-     * @returns IP address or null (cannot connect via Peer to Peer).
+     * This method will attempt to end the meeting.
+     * Upon improper usage, exceptions will be thrown.
      */
-    public getIP(): string | null {
-        return null; // TODO: UNUTILIZED!
-    }
-
-    /**
-     * This method will negotiate a connection with the other peer, and store the appropriate details.
-     * If calling this method worked, it will unlock the send method.
-     * 
-     * @returns true - a peer to peer connection is being utilized. false for TURN connections.
-     * null - negotiation failed.
-     */
-    public negotiateConnection(): boolean | null {
-        return null; // TODO: UNUTILIZED!
+    public end(): void {
+        return; // TODO: UNUTILIZED!
     }
 
     /**
      * This method will send a message to the user's peer.
-     * It will only work after being unlocked by the negotiateConnection method.
+     * It will only work after being unlocked  by a join method.
      * 
      * Upon improper usage, exceptions will be thrown.
      */
@@ -88,56 +202,23 @@ export class Networking {
     }
 };
 
-export function handleSignalingMessage(sock: Socket, message: string) {
+type SignalingServerResponse = {
+    response: SignalingResponseStatus;
+    type: SignalingResponseType;
+    reason?: string; // Used for errors
 
-    // Handle heartbeats
-    if (message == "HEARTBEAT") {
-        sock.write("HEARTBEAT");
-        console.log("Sent a heart beat out to the server!");
-    }
-
-    /** TODO: Handle the following messages:
-     * - Response: Error [ Show GUI message or something ]
-     * - Response: Success [ Continue process / show GUI message / do GUI-related stuff ]
-     * - Resposne: Info [ Could be join or something... ]
-     */
+    id?: string;
+    password?: string;
+    host?: boolean;
 }
 
-export function handleICEMessage(sock: Socket, message: string) {
+type SignalingResponseStatus = "success" | "info" | "error";
+type SignalingResponseType = "created" | "joined" | "switched" | "left" | "ended";
 
-    // Handle heartbeats
-    if (message == "HEARTBEAT") {
-        sock.write("HEARTBEAT");
-    }
+type NetworkingState = "connecting" | "connected"; // hmmmm
 
-    /** TODO: Handle the following messages:
-     * - Response: Error [ Show GUI message or something ]
-     * - Response: Success [ Continue process / show GUI message / do GUI-related stuff ]
-     * - Resposne: Info [ Could be join or something... ]
-     */
+// Perhaps make a better function system?
+
+function handleSignalingMessage(data: string) {
+    Networking.getInstance().handleSignalingMessage(data);
 }
-
-export function startMeeting(sock: Socket, message: SignalingMessage, id?: string, password?: string) {
-    if (message == "start") {
-        sock.write(`{"request": "start"}`);
-    }
-    
-    if (message == "join") {
-        sock.write(`{"request": "join", "id": "${id}", "password": "${password}"}`);
-    }
-
-    if (message == "switch") {
-        sock.write(`{"request": "switch"}`);
-    }
-
-    if (message == "leave") {
-        sock.write(`{"request": "leave"}`);
-    }
-    
-    if (message == "end") {
-        sock.write(`{"request": "end"}`);
-    }
-}
-
-type SignalingMessage = "start" | "join" | "switch" | "leave" | "end";
-type ICEMessage = "connect" | "leave"; 

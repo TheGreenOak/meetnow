@@ -15,8 +15,9 @@ since they're useless either way, considering the Renderer process can't make us
 contextBridge.exposeInMainWorld("networking", {
     start: net.start,
     join: net.join,
+    switch: net.switch,
     leave: net.leave,
-    getIP: net.getIP,
-    negotiateConnection: net.negotiateConnection,
-    send: net.send
+    end: net.end,
+    send: net.send,
+    on: net.on
 });
