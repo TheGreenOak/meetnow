@@ -527,7 +527,7 @@ class Signaling(TCPServer):
             
             if request["request"] == "start":
                 id, password = self.create_meeting(addr)
-                responses.append((sock, serialize({"response": "success", "id": id, "password": password})))
+                responses.append((sock, serialize({"response": "success","type": "created", "id": id, "password": password})))
             
             elif request["request"] == "join":
                 if not request.get("id") or not request.get("password"):
@@ -535,25 +535,25 @@ class Signaling(TCPServer):
                 
                 other_client = self.join_meeting(addr, request["id"], request["password"])
                 if other_client:
-                    responses.append((sock, serialize({"response": "success", "host": False})))
+                    responses.append((sock, serialize({"response": "success","type": "joined", "host": False})))
                     responses.append((other_client, serialize({"response": "info", "type": "joined"})))
                 else:
-                    responses.append((sock, serialize({"response": "success", "host": True})))
+                    responses.append((sock, serialize({"response": "success", "type": "joined", "host": True})))
             
             elif request["request"] == "switch":
                 new_host = self.switch_host(addr)
-                responses.append((sock, serialize({"response": "success"})))
-                responses.append((new_host, serialize({"response": "info", "type": "switched"})))
+                responses.append((sock, serialize({"response": "success", "type" : "switched"})))
+                responses.append((new_host, serialize({"response": "info", "type" : "switched"})))
             
             elif request["request"] == "leave":
                 remaining_user = self.leave_meeting(addr)
-                responses.append((sock, serialize({"response": "success"})))
+                responses.append((sock, serialize({"response": "success", "type" : "left"})))
                 if remaining_user:
                     responses.append((remaining_user, serialize({"response": "info", "type": "left"})))
 
             elif request["request"] == "end":
                 remaining_user = self.end_meeting(addr)
-                responses.append((sock, serialize({"response": "success"})))
+                responses.append((sock, serialize({"response": "success", "type" : "ended"})))
                 if remaining_user:
                     responses.append((remaining_user, serialize({"response": "info", "type": "ended"})))
 
