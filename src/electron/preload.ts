@@ -1,4 +1,4 @@
-import { contextBridge } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 import { Networking } from "./backend";
 
 const net = Networking.getInstance();
@@ -19,5 +19,8 @@ contextBridge.exposeInMainWorld("networking", {
     leave: net.leave,
     end: net.end,
     send: net.send,
-    on: net.on
+    onMessage: (callback: Function) => net.onMessage(callback),
+    onStateChange: (callback: Function) => net.onStateChange(callback),
+    onHostChange: (callback: Function) => net.onHostChange(callback),
+    onError: (callback: Function) => net.onError(callback)
 });

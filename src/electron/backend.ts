@@ -1,41 +1,15 @@
 import { Socket } from "net";
 import { EventEmitter } from "events";
 
-/*
-yeho's little think box
------------------------
-
-maybe create an event emitter for App.svelte to handle
-it will emit stateChange events and such.
-
-for instance, .on("stateChange", (newState) => {
-    if newState is waiting:
-    drop client in a fake meeting, waiting for someone to arrive.
-
-    if newState is connecting:
-    show client the connection is being made
-
-    if newState is connected:
-    unlock send method, and allow for communication
-
-    if newState is disconnected:
-    drop other client
-
-    if newState is ended:
-    drop yourself from the meeting
-});
-
-.on("hostChange", () => {
-    unlock end meeting button.
-});
-*/
-
 /**
- * Stateful singleton class for handling all client-side networking.
+ * Stateful, event emitting, singleton class for handling all client-side networking.
  */
 export class Networking extends EventEmitter {
     private static instance?: Networking;
-    private signalingSocket?: Socket;
+    private static signalingSocket?: Socket;
+
+    private static connected: boolean = false;
+    private static canSend: boolean = false; 
 
     private constructor() {
         super();
@@ -51,7 +25,7 @@ export class Networking extends EventEmitter {
 
     public handleSignalingMessage(data: string) {
         if (data == "HEARTBEAT") {
-            this.signalingSocket?.write("HEARTBEAT");
+            Networking.signalingSocket?.write("HEARTBEAT");
             return; // No need for any further action.
         }
 
@@ -68,9 +42,10 @@ export class Networking extends EventEmitter {
 
             if (deserialized.type == "joined") {
                 if (!deserialized.host) {
-
+                    
                 }
 
+                Networking.connected = true;
                 this.emit("stateChange", {
                     newState: "joined",
                     me: true,
@@ -83,8 +58,9 @@ export class Networking extends EventEmitter {
             }
 
             if (deserialized.type == "left") {
-                this.signalingSocket?.destroy();
-                this.signalingSocket = undefined;
+                Networking.connected = false;
+                Networking.signalingSocket?.destroy();
+                Networking.signalingSocket = undefined;
 
                 this.emit("stateChange", {
                     newState: "left",
@@ -93,8 +69,9 @@ export class Networking extends EventEmitter {
             }
 
             if (deserialized.type == "ended") {
-                this.signalingSocket?.destroy();
-                this.signalingSocket = undefined;
+                Networking.connected = false;
+                Networking.signalingSocket?.destroy();
+                Networking.signalingSocket = undefined;
 
                 this.emit("stateChange", {
                     newState: "ended"
@@ -119,6 +96,7 @@ export class Networking extends EventEmitter {
             }
 
             if (deserialized.type == "ended") {
+                Networking.connected = false;
                 this.emit("stateChange", {
                     newState: "ended"
                 });
@@ -130,6 +108,19 @@ export class Networking extends EventEmitter {
         }
     }
 
+    public makeSignalingSocket() {
+        Networking.signalingSocket = new Socket();
+
+        Networking.signalingSocket.on("data", (data) => handleSignalingMessage(data.toString()));
+        Networking.signalingSocket.on("error", () => {
+            Networking.signalingSocket?.destroy();
+            Networking.signalingSocket = undefined;
+            this.emit("error", "Could not connect to signaling server.");
+        });
+
+        Networking.signalingSocket.connect(5060, "127.0.0.1");
+    }
+
 
       /////////////////////////////////////////
      ///        CLIENT-SIDE METHODS        ///
@@ -138,33 +129,25 @@ export class Networking extends EventEmitter {
     /**
      * Starts a new meeting, and automatically joins it.
      * Upon improper usage, exceptions will be thrown.
-     * 
-     * @returns Meeting ID and password, seperated by a semicolon.
      */
-    public start(): string {
-        if (this.signalingSocket != null) {
-            throw new Error(); // Maybe custom error?
+    public start() {
+        if (Networking.signalingSocket == undefined) {
+            makeSignalingSocket();
         }
 
-        this.signalingSocket = new Socket();
-        this.signalingSocket.connect(5060, "127.0.0.1");
-        this.signalingSocket.on("data", (data) => handleSignalingMessage(data.toString()));
-        this.signalingSocket.write(JSON.stringify({request: "start"}));
-
-        return "The function has returned. At last!"; // TODO: UNUTILIZED!
+        Networking.signalingSocket?.write(JSON.stringify({request: "start"}));
     }
 
     /**
      * This method will attempt to join a meeting.
-     * 
-     * Upon any errors (such as invalid ID, wrong password, full meeting etc..), exceptions will be thrown.
-     * 
-     * @param id The meeting ID
-     * @param password The meeting password
-     * @returns true - you're waiting for someone else, and therefore is the host. false for otherwise.
+     * Upon improper usage, exceptions will be thrown.
      */
-    public join(id: string, password: string): boolean {
-        return false; // TODO: UNUTILIZED!
+    public join(id: string, password: string) {
+        if (Networking.signalingSocket == undefined) {
+            makeSignalingSocket();
+        }
+
+        Networking.signalingSocket?.write(JSON.stringify({request: "join", id: id, password: password}));
     }
 
     /**
@@ -172,7 +155,11 @@ export class Networking extends EventEmitter {
      * Upon improper usage, exceptions will be thrown.
      */
     public switch(): void {
-        return; // TODO: UNUTILIZED!
+        if (Networking.connected != true) {
+            throw new Error();
+        }
+
+        Networking.signalingSocket?.write(JSON.stringify({request: "switch"}));
     }
 
     /**
@@ -180,7 +167,11 @@ export class Networking extends EventEmitter {
      * Upon improper usage, exceptions will be thrown.
      */
     public leave(): void {
-        return; // TODO: UNUTILIZED!
+        if (Networking.connected != true) {
+            throw new Error();
+        }
+
+        Networking.signalingSocket?.write(JSON.stringify({request: "leave"}));
     }
 
     /**
@@ -188,7 +179,11 @@ export class Networking extends EventEmitter {
      * Upon improper usage, exceptions will be thrown.
      */
     public end(): void {
-        return; // TODO: UNUTILIZED!
+        if (Networking.connected) {
+            throw new Error();
+        }
+
+        Networking.signalingSocket?.write(JSON.stringify({request: "end"}));
     }
 
     /**
@@ -198,7 +193,47 @@ export class Networking extends EventEmitter {
      * Upon improper usage, exceptions will be thrown.
      */
     public send(): void {
-        return; // TODO: UNUTILIZED!
+        if (Networking.canSend != true) {
+            throw new Error();
+        }
+
+        console.log("Unimplemented");
+    }
+
+    /**
+     * This method will call the callback when you get a new client message.
+     * 
+     * @param callback The callback to be called when you receive a message.
+     */
+    public onMessage(callback: any) {
+        this.on("message", callback);
+    }
+
+    /**
+     * This method will call the callback when the networking state changes.
+     * 
+     * @param callback The callback to be called when the networking state changes.
+     */
+    public onStateChange(callback: any) {
+        this.on("stateChange", callback);
+    }
+
+    /**
+     * This method will call the callback when the meeting host changes.
+     * 
+     * @param callback The callback to be called when the meeting host changes.
+     */
+    public onHostChange(callback: any) {
+        this.on("hostChange", callback);
+    }
+
+    /**
+     * This method will call the callback when an error occurs.
+     * 
+     * @param callback The callback to be called when an error occurs.
+     */
+    public onError(callback: any) {
+        this.on("error", callback);
     }
 };
 
@@ -215,9 +250,11 @@ type SignalingServerResponse = {
 type SignalingResponseStatus = "success" | "info" | "error";
 type SignalingResponseType = "created" | "joined" | "switched" | "left" | "ended";
 
-type NetworkingState = "connecting" | "connected"; // hmmmm
-
 // Perhaps make a better function system?
+
+function makeSignalingSocket() {
+    Networking.getInstance().makeSignalingSocket();
+}
 
 function handleSignalingMessage(data: string) {
     Networking.getInstance().handleSignalingMessage(data);
