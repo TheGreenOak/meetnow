@@ -264,7 +264,9 @@ class ICE(TCPServer):
 
         # If the user disconnects in a meeting, remove them from the meeting
         if user.get("id"):
-            second_user, second_user_sock = self.disconnect_peer(address)
+            second_user = self.disconnect_peer(address)
+            if second_user: # Unpack the tuple safely
+                second_user, second_user_sock = second_user
         
         del self.users[address]
         
