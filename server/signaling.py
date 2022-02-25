@@ -364,7 +364,9 @@ class Signaling(TCPServer):
 
         # If the user disconnects in a meeting, remove them from the meeting
         if user.get("id"):
-            second_user, second_user_sock = self.leave_meeting(address)
+            second_user = self.leave_meeting(address)
+            if second_user: # We need to unpack the tuple safely
+                second_user, second_user_sock = second_user
         
         del self.users[address]
         
