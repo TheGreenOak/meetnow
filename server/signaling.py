@@ -1,4 +1,3 @@
-import threading
 from server import TCPServer
 from threading import Thread, Event
 from json import loads as deserialize, dumps as serialize
@@ -217,7 +216,7 @@ class Signaling(TCPServer):
         user_uuid (str): Address tuple or other unique identifier.
 
         Returns:
-        socket | None: The remaining user's socket.
+        tuple | None: The remaining user's address and socket.
         """
 
         # Check if the user is already in a meeting
@@ -227,7 +226,7 @@ class Signaling(TCPServer):
         # Remove the user from the meeting
         user = self.users[user_uuid]
         meeting = self.meetings[user["id"]]
-        remaining_user_sock = None
+        remaining_user_address = None
 
         # Update the meeting and the public database
         meeting["participants"].remove(user_uuid)
@@ -239,11 +238,11 @@ class Signaling(TCPServer):
 
         # Check if another user is still in the meeting
         if len(meeting["participants"]) == 1:
-            remaining_user = self.users[meeting["participants"][0]]
+            remaining_user_address = self.meeting["participants"][0]
+            remaining_user = self.users[remaining_user_address]
             remaining_user["host"] = True
-            remaining_user_sock = remaining_user["socket"]
         
-        return remaining_user_sock
+        return remaining_user_address, remaining_user["socket"]
 
 
     def switch_host(self, user_uuid):
@@ -349,17 +348,20 @@ class Signaling(TCPServer):
 
         address (tuple): Address tuple or other unique identifier.
 
-        returns: tuple | None: The message that needs to be sent to the socket (both in tuple).
+        Returns:
+        bool: Whether or not another client was disconnected
         """
 
         # Setup temporary variables
         user = self.users[address]
         client = user["socket"]
+
         second_user = None
+        second_user_sock = None
 
         # If the user disconnects in a meeting, remove them from the meeting
         if user.get("id"):
-            second_user = self.leave_meeting(address)
+            second_user, second_user_sock = self.leave_meeting(address)
         
         del self.users[address]
         
@@ -371,8 +373,14 @@ class Signaling(TCPServer):
         
         print("[DISCONNECTED] {}:{}".format(address[0], address[1]))
 
-        if second_user:
-            return (second_user, serialize({"response": "info", "type": "left"}))
+        try:
+            if second_user_sock:
+                second_user_sock.send(serialize({"response": "info", "type": "left"}))
+        except BrokenPipeError:
+            self.disconnect_client(second_user)
+            return True
+        
+        return False
 
 
     def meeting_cleaner(self):
@@ -394,6 +402,9 @@ class Signaling(TCPServer):
                 if len(meeting["participants"]) == 0:
                     if meeting["expiration"] <= 1: # The meeting has expired.
                         del self.meetings[id]
+                        if self.public_db:
+                            del self.public_db[id]
+                            
                         counter += 1
 
                         # Get the creator
@@ -430,15 +441,17 @@ class Signaling(TCPServer):
 
             for user_uuid, user in self.users.copy().items():
                 if user["ttl"] <= 0: # The user has probably disconnected
-                    participant = self.disconnect_client(user_uuid)
-                    if participant:
-                        participant, message = participant
-                        participant.send(message.encode())
-                    
+                    self.disconnect_client(user_uuid)
                     counter += 1
                 else:
-                    user["ttl"] = user["ttl"] - 1
-                    user["socket"].send(b"HEARTBEAT")
+                    try:
+                        user["ttl"] = user["ttl"] - 1
+                        user["socket"].send(b"HEARTBEAT")
+                    except BrokenPipeError: # User has disconnected abruptly.
+                        if self.disconnect_client(user_uuid):
+                            counter += 2
+                        else:
+                            counter += 1
 
             if counter > 0:
                 print("[EXPIRY WORKER] Disconnected {} client{}".format(counter, 's' if counter > 1 else ''))
@@ -463,11 +476,7 @@ class Signaling(TCPServer):
                     data = user["socket"].recv(MAX_MESSAGE_LENGTH)
 
                     if not data:  # The user has disconnected
-                        participant = self.disconnect_client(address)
-                        if participant:
-                            participant, message = participant
-                            participant.send(message.encode())
-                        
+                        self.disconnect_client(address)
                         continue
                         
                     # We got a message! Forward it to the handler, and try sending responses
@@ -589,16 +598,17 @@ class Signaling(TCPServer):
 
     def run(self):
         # Worker thread list
-        threads = [Thread(target=self.meeting_cleaner), Thread(target=self.user_cleaner), Thread(target=self.user_handler)]
+        workers = [Thread(target=self.meeting_cleaner), Thread(target=self.user_cleaner), Thread(target=self.user_handler)]
 
         try:
             # Start the threads
-            for worker in threads: worker.start()
+            for worker in workers: worker.start()
 
             # Accept new clients and handle them
             while True:
                 try:
                     client, address = self.accept()
+                    client.setblocking(False)
                     self.users[address] = {"ttl": USER_TTL_MESSAGES, "socket": client} # Insert the user to the database
                     print("[CONNECTED] {}:{}".format(address[0], address[1]))
                 except BlockingIOError:
@@ -608,11 +618,13 @@ class Signaling(TCPServer):
             self.expiry_stopper.set()
 
             # Safely wait for all threads to end
-            for thread in threads:
-                thread.join()
+            for worker in workers:
+                worker.join()
 
 
 def main():
+    public_db = None
+
     # Connect to the public database
     try:
         public_db = RedisDictDB("meetings")
@@ -637,7 +649,7 @@ def main():
 
     # Flush the database
     try:
-        del public_db
+        public_db.flush()
     except: pass
 
 
