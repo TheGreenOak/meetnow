@@ -202,7 +202,7 @@ class ICE(TCPServer):
         user_uuid (any): Tuple address or other unique identifier.
 
         Returns:
-        socket | None: The other user's socket.
+        tuple | None: The remaining user's address and socket.
         """
         
         # Get the user
@@ -211,6 +211,7 @@ class ICE(TCPServer):
 
         connection = None
         other_user = None
+        other_user_address = None
 
         # Check if the user is connected
         if not user.get("id"):
@@ -224,7 +225,8 @@ class ICE(TCPServer):
         # Determine if we have another peer
         if len(connection) > 1:
             user_index = connection.index(user_uuid)
-            other_user = self.users[connection[user_index ^ 1]]["socket"] # XOR shortcut
+            other_user_address = connection[user_index ^ 1] # XOR shortcut
+            other_user = self.users[other_user_address]
         
         # Remove the user from the connection
         connection.remove(user_uuid)
@@ -236,7 +238,8 @@ class ICE(TCPServer):
         # Mark the user as disconnected
         del user["id"]
 
-        return other_user
+        if other_user:
+            return other_user_address, other_user
 
 
     def disconnect_client(self, address):
@@ -261,7 +264,7 @@ class ICE(TCPServer):
 
         # If the user disconnects in a meeting, remove them from the meeting
         if user.get("id"):
-            second_user, second_user_sock = self.leave_meeting(address)
+            second_user, second_user_sock = self.disconnect_peer(address)
         
         del self.users[address]
         
@@ -403,7 +406,7 @@ class ICE(TCPServer):
                 other_peer = self.disconnect_peer(addr)
                 responses.append((sock, serialize({"response": "success"})))
                 if other_peer:
-                    responses.append((other_peer, serialize({"response": "info", "type": "disconnected"})))
+                    responses.append((other_peer[1], serialize({"response": "info", "type": "disconnected"})))
 
             else:
                 raise InvalidRequest
