@@ -495,10 +495,7 @@ class Signaling(TCPServer):
                     pass
 
                 except (ConnectionError, OSError):
-                    participant = self.disconnect_client(address)
-                    if participant:
-                        participant, message = participant
-                        participant.send(message.encode())
+                    self.disconnect_client(address)
             
             
 
