@@ -35,6 +35,7 @@ export class Networking extends EventEmitter {
             if (deserialized.type == "created") {
                 this.emit("stateChange", {
                     newState: "started",
+                    me: true,
                     id: deserialized.id,
                     password: deserialized.password
                 });
@@ -74,7 +75,8 @@ export class Networking extends EventEmitter {
                 Networking.signalingSocket = undefined;
 
                 this.emit("stateChange", {
-                    newState: "ended"
+                    newState: "ended",
+                    me: true
                 });
             }
         }
@@ -98,7 +100,8 @@ export class Networking extends EventEmitter {
             if (deserialized.type == "ended") {
                 Networking.connected = false;
                 this.emit("stateChange", {
-                    newState: "ended"
+                    newState: "ended",
+                    me: false
                 });
             }
         }
@@ -241,6 +244,15 @@ type SignalingServerResponse = {
     response: SignalingResponseStatus;
     type: SignalingResponseType;
     reason?: string; // Used for errors
+
+    id?: string;
+    password?: string;
+    host?: boolean;
+}
+
+export type SignalingState = {
+    newState: SignalingResponseType;
+    me: boolean;
 
     id?: string;
     password?: string;

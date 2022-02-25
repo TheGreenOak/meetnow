@@ -1,25 +1,42 @@
 <script lang="ts">
-	import type { Networking } from "../electron/backend";
+	import type { Networking, SignalingState } from "../electron/backend";
 	import Webcam from "./components/Webcam.svelte";
 	import Microphone from "./components/Microphone.svelte";
 
 	// We cast window as any to avoid getting a TypeScript error.
 	// This is usually dangerous, however, we know window does have the networking attribute from Electron's preload.
 	const net: Networking = (window as any).networking;
-	net.onStateChange((data: object) => { console.log(data); });
-	net.onHostChange((data: boolean) => { 
-		if (data) { 
-			console.log("You're now the host!"); 
-		} else { 
-			console.log("You're no longer the host!"); 
-		} 
+	net.onStateChange((data: SignalingState) => {
+		console.log(data);
+		showMessage(data.newState, 3000);
 	});
-	net.onError((data: string) => { console.error(data); });
+
+	net.onHostChange((data: boolean) => { 
+		if (data == true) {
+			showHost(true, 2000);
+		} else {
+			showHost(false, 2000);
+		}
+	});
+
+	net.onError((data: string) => {
+		showError(data, 3000);
+	});
 	
 	let webcamOn: boolean = false;
 	let micOn: boolean = false;
+
 	let cam: Webcam = null;
 	let mic: Microphone = null;
+
+	let error: boolean = false;
+	let errContent: string = "";
+
+	let host: boolean = false;
+	let isHost: boolean = false;
+
+	let message: boolean = false;
+	let msgContent: string = "";
 
 	function toggleWebcam() {
 		webcamOn = webcamOn ? false : true;
@@ -27,12 +44,41 @@
 			cam.turnOff()
 		}
 	}
+
 	function toggleMicrophone() {
 		micOn = micOn ? false : true;
 		if(!micOn) {
 			mic.turnOff();
 		}
 	}
+
+	function showMessage(content: string, timeout: number) {
+		message = true;
+		msgContent = content;
+
+		setTimeout(() => {
+			message = false;
+		}, timeout);
+	}
+
+	function showError(content: string, timeout: number) {
+		error = true;
+		errContent = content;
+
+		setTimeout(() => {
+			error = false;
+		}, timeout);
+	}
+
+	function showHost(state: boolean, timeout: number) {
+		host = true;
+		isHost = state;
+
+		setTimeout(() => {
+			host = false;
+		}, timeout);
+	}
+
 </script>
 
 <main>
@@ -51,9 +97,43 @@
 	{/if}
 	
 	<button class={micOn ? "microphone-on" : "microphone-off"} on:click={toggleMicrophone}>[{micOn ? "(m)ON" : "(m)OFF"}]</button>
+
+	{#if message}
+		<div class="message">{msgContent}</div>
+	{/if}
+
+	{#if error}
+		<div class="message error">{errContent}</div>
+	{/if}
+
+	{#if host}
+		<div class="message success">You're {isHost ? "now" : "no longer"} the host.</div>
+	{/if}
 </main>
 
 <style>
+	.message {
+		color: white;
+		background-color: blue;
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		font-family: Arial;
+		font-weight: bold;
+		font-size: 26px;
+		border-radius: 10px;
+		padding: 10px;
+	}
+
+	.message.success {
+		background-color: green;
+	}
+
+	.message.error {
+		background-color: red;
+	}
+
 	button {
 		color: white;
 		background-color: rgb(77, 77, 77);
