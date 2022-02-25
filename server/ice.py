@@ -248,27 +248,39 @@ class ICE(TCPServer):
 
         address (tuple): Address tuple or other unique identifier.
 
-        returns: tuple | None: The message that needs to be sent to the socket (both in tuple).
+        Returns:
+        bool: Whether or not another client was disconnected
         """
 
         # Setup temporary variables
         user = self.users[address]
         client = user["socket"]
+
         second_user = None
+        second_user_sock = None
 
         # If the user disconnects in a meeting, remove them from the meeting
         if user.get("id"):
-            second_user = self.disconnect_peer(address)
+            second_user, second_user_sock = self.leave_meeting(address)
         
         del self.users[address]
         
         # Disconnect the socket
-        client.shutdown(socket.SHUT_RDWR)
-        client.close()
+        try:
+            client.shutdown(socket.SHUT_RDWR)
+            client.close()
+        except OSError: pass
+        
         print("[DISCONNECTED] {}:{}".format(address[0], address[1]))
 
-        if second_user:
-            return (second_user, serialize({"response": "info", "type": "left"}))
+        try:
+            if second_user_sock:
+                second_user_sock.send(serialize({"response": "info", "type": "left"}))
+        except BrokenPipeError:
+            self.disconnect_client(second_user)
+            return True
+        
+        return False
     
 
     def user_cleaner(self):
@@ -289,8 +301,14 @@ class ICE(TCPServer):
                     self.disconnect_client(user_uuid)
                     counter += 1
                 else:
-                    user["ttl"] = user["ttl"] - 1
-                    user["socket"].send(b"HEARTBEAT")
+                    try:
+                        user["ttl"] = user["ttl"] - 1
+                        user["socket"].send(b"HEARTBEAT")
+                    except BrokenPipeError: # User has disconnected abruptly.
+                        if self.disconnect_client(user_uuid):
+                            counter += 2
+                        else:
+                            counter += 1
 
             if counter > 0:
                 print("[EXPIRY WORKER] Disconnected {} client{}".format(counter, 's' if counter > 1 else ''))
@@ -315,11 +333,7 @@ class ICE(TCPServer):
                     data = user["socket"].recv(MAX_MESSAGE_LENGTH)
 
                     if not data:  # The user has disconnected
-                        participant = self.disconnect_client(address)
-                        if participant:
-                            participant, message = participant
-                            participant.send(message.encode())
-                        
+                        self.disconnect_client(address)
                         continue
                         
                     # We got a message! Forward it to the handler, and try sending responses
@@ -338,10 +352,7 @@ class ICE(TCPServer):
                     pass
 
                 except (ConnectionError, OSError):
-                    participant = self.disconnect_client(address)
-                    if participant:
-                        participant, message = participant
-                        participant.send(message.encode())
+                    self.disconnect_client(address)
 
 
     def handle_message(self, addr, sock, message):
@@ -416,6 +427,7 @@ class ICE(TCPServer):
             while True:
                 try:
                     client, address = self.accept()
+                    client.setblocking(False)
                     self.users[address] = {"ttl": USER_TTL_MESSAGES, "socket": client} # Insert the user to the database
                     print("[CONNECTED] {}:{}".format(address[0], address[1]))
                 except BlockingIOError:
