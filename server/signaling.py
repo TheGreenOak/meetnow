@@ -226,6 +226,8 @@ class Signaling(TCPServer):
         # Remove the user from the meeting
         user = self.users[user_uuid]
         meeting = self.meetings[user["id"]]
+
+        remaining_user = None
         remaining_user_address = None
 
         # Update the meeting and the public database
@@ -238,11 +240,12 @@ class Signaling(TCPServer):
 
         # Check if another user is still in the meeting
         if len(meeting["participants"]) == 1:
-            remaining_user_address = self.meeting["participants"][0]
+            remaining_user_address = meeting["participants"][0]
             remaining_user = self.users[remaining_user_address]
             remaining_user["host"] = True
         
-        return remaining_user_address, remaining_user["socket"]
+        if remaining_user:
+            return remaining_user_address, remaining_user["socket"]
 
 
     def switch_host(self, user_uuid):
@@ -555,7 +558,7 @@ class Signaling(TCPServer):
                 remaining_user = self.leave_meeting(addr)
                 responses.append((sock, serialize({"response": "success", "type" : "left"})))
                 if remaining_user:
-                    responses.append((remaining_user, serialize({"response": "info", "type": "left"})))
+                    responses.append((remaining_user[1], serialize({"response": "info", "type": "left"})))
 
             elif request["request"] == "end":
                 remaining_user = self.end_meeting(addr)
