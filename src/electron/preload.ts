@@ -13,15 +13,12 @@ We only expose abstractions that help the renderer do connections. We never expo
 since they're useless either way, considering the Renderer process can't make use of them.
 */
 contextBridge.exposeInMainWorld("networking", {
-    start:         net.start.bind(net),
-    join:          net.join.bind(net),
-    switch:        net.switch.bind(net),
-    leave:         net.leave.bind(net),
-    end:           net.end.bind(net),
-    send:          net.send.bind(net),
+    start:   net.start.bind(net),
+    join:    net.join.bind(net),
+    switch:  net.switch.bind(net),
+    leave:   net.leave.bind(net),
+    end:     net.end.bind(net),
+    send:    net.send.bind(net),
 
-    onMessage:     (callback: Function) => net.onMessage(callback),
-    onStateChange: (callback: Function) => net.onStateChange(callback),
-    onHostChange:  (callback: Function) => net.onHostChange(callback),
-    onError:       (callback: Function) => net.onError(callback)
+    on:      (event: string, callback: any) => net.on(event, callback),
 });

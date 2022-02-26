@@ -10,11 +10,13 @@ export class Networking extends EventEmitter {
     private state: NetworkingState;
     private sockets: NetworkingSockets;
 
-    private connected: boolean = false;
-
     private constructor() {
         super();
-        this.state = { joinAttempted: false };
+
+        this.state = {
+            connected: false,
+            joinAttempted: false
+        };
         this.sockets = {};
     }
 
@@ -49,7 +51,7 @@ export class Networking extends EventEmitter {
                     this.establishConnection();
                 }
 
-                this.connected = true;
+                this.state.connected = true;
                 this.emit("stateChange", {
                     newState: "connected",
                     me: true,
@@ -62,7 +64,7 @@ export class Networking extends EventEmitter {
             }
 
             else if (deserialized.type == "disconnected") {
-                this.connected = false;
+                this.state.connected = false;
                 this.sockets.signaling?.destroy();
                 this.sockets.signaling = undefined;
 
@@ -73,7 +75,7 @@ export class Networking extends EventEmitter {
             }
 
             else if (deserialized.type == "ended") {
-                this.connected = false;
+                this.state.connected = false;
                 this.sockets.signaling?.destroy();
                 this.sockets.signaling = undefined;
 
@@ -104,7 +106,7 @@ export class Networking extends EventEmitter {
             }
 
             else if (deserialized.type == "ended") {
-                this.connected = false;
+                this.state.connected = false;
                 this.emit("stateChange", {
                     newState: "ended",
                     me: false
@@ -181,14 +183,13 @@ export class Networking extends EventEmitter {
 
         // Step 2. Negotitate connection via ICE
         this.negotiateConnection().then((remoteAddress) => {
-            // Step 3. Open a "generic" communication socket, and unlock send method
+            // Step 3. Open a "generic" communication socket
 
         })
 
         .catch((err) => {
 
         });
-
     }
 
     /**
@@ -199,18 +200,19 @@ export class Networking extends EventEmitter {
     public getIP(): Promise<string> {
         return new Promise<string>((resolve, reject) => {
             let stunSocket: UDPSocket = createUDPSocket("udp4");
+            stunSocket.connect(3478);
 
-            stunSocket.on("message", (data) => {
-                stunSocket.removeAllListeners();
+            stunSocket.once("message", (data) => {
                 resolve(data.toString());
             });
 
-            stunSocket.on("error", () => {
-                stunSocket.removeAllListeners();
+            stunSocket.once("error", () => {
                 reject("Unable to get your IP address.");
             });
 
-            stunSocket.send(Buffer.from("getIP"), 3478);
+            stunSocket.once("connect", () => {
+                stunSocket.send("getIP");
+            });
         });
     }
 
@@ -250,6 +252,10 @@ export class Networking extends EventEmitter {
      * Upon improper usage, exceptions will be thrown.
      */
     public start() {
+        if (this.state.connected) {
+            throw new Error();
+        }
+
         if (this.sockets.signaling == undefined) {
             this.makeSignalingSocket();
         }
@@ -262,6 +268,10 @@ export class Networking extends EventEmitter {
      * Upon improper usage, exceptions will be thrown.
      */
     public join(id: string, password: string) {
+        if (this.state.connected) {
+            throw new Error();
+        }
+
         if (this.sockets.signaling == undefined) {
             this.makeSignalingSocket();
         }
@@ -278,7 +288,7 @@ export class Networking extends EventEmitter {
      * Upon improper usage, exceptions will be thrown.
      */
     public switch(): void {
-        if (this.connected != true) {
+        if (this.state.connected != true || this.state.host == false) {
             throw new Error();
         }
 
@@ -290,7 +300,7 @@ export class Networking extends EventEmitter {
      * Upon improper usage, exceptions will be thrown.
      */
     public leave(): void {
-        if (this.connected != true) {
+        if (this.state.connected != true) {
             throw new Error();
         }
 
@@ -302,7 +312,7 @@ export class Networking extends EventEmitter {
      * Upon improper usage, exceptions will be thrown.
      */
     public end(): void {
-        if (this.connected != true) {
+        if (this.state.connected != true) {
             throw new Error();
         }
 
@@ -315,48 +325,12 @@ export class Networking extends EventEmitter {
      * 
      * Upon improper usage, exceptions will be thrown.
      */
-    public send(): void {
-        if (this.canSend != true) {
+    public send(data: string): void {
+        if (this.sockets.communication == undefined) {
             throw new Error();
         }
 
-        console.log("Unimplemented");
-    }
-
-    /**
-     * This method will call the callback when you get a new client message.
-     * 
-     * @param callback The callback to be called when you receive a message.
-     */
-    public onMessage(callback: any) {
-        this.on("message", callback);
-    }
-
-    /**
-     * This method will call the callback when the networking state changes.
-     * 
-     * @param callback The callback to be called when the networking state changes.
-     */
-    public onStateChange(callback: any) {
-        this.on("stateChange", callback);
-    }
-
-    /**
-     * This method will call the callback when the meeting host changes.
-     * 
-     * @param callback The callback to be called when the meeting host changes.
-     */
-    public onHostChange(callback: any) {
-        this.on("hostChange", callback);
-    }
-
-    /**
-     * This method will call the callback when an error occurs.
-     * 
-     * @param callback The callback to be called when an error occurs.
-     */
-    public onError(callback: any) {
-        this.on("error", callback);
+        this.sockets.communication.send(Buffer.from(data));
     }
 };
 
@@ -375,12 +349,13 @@ type NetworkingState = {
     id?: string;
     password?: string;
     host?: boolean;
+    
+    connected: boolean;
+    joinAttempted: boolean;
 
     // ICE State
     localAddress?: Address;
     remoteAddress?: Address;
-
-    joinAttempted: boolean;
 };
 
 export type SignalingState = {

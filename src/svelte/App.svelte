@@ -6,12 +6,13 @@
 	// We cast window as any to avoid getting a TypeScript error.
 	// This is usually dangerous, however, we know window does have the networking attribute from Electron's preload.
 	const net: Networking = (window as any).networking;
-	net.onStateChange((data: SignalingState) => {
+	
+	net.on("stateChange", (data: SignalingState) => {
 		console.log(data);
 		showMessage(data.newState, 3000);
 	});
 
-	net.onHostChange((data: boolean) => { 
+	net.on("hostChange", (data: boolean) => { 
 		if (data == true) {
 			showHost(true, 2000);
 		} else {
@@ -19,7 +20,7 @@
 		}
 	});
 
-	net.onError((data: string) => {
+	net.on("error", (data: string) => {
 		showError(data, 3000);
 	});
 	
