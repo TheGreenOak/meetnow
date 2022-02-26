@@ -52,6 +52,7 @@ class TCPServer:
         """
         Stops the server.
         """
+        self.socket.shutdown(socket.SHUT_RDWR)
         self.socket.close()
 
 
