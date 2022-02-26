@@ -1,22 +1,25 @@
-import { Socket } from "net";
+import { Socket as UDPSocket, createSocket as createUDPSocket } from "dgram";
+import { Socket as TCPSocket } from "net";
 import { EventEmitter } from "events";
 
 /**
- * Stateful, event emitting, singleton class for handling all client-side networking.
+ * Stateful, event emitting, singleton class for handling all client-side this.
  */
 export class Networking extends EventEmitter {
     private static instance?: Networking;
-    private static signalingSocket?: Socket;
+    private state: NetworkingState;
+    private sockets: NetworkingSockets;
 
-    private static connected: boolean = false;
-    private static canSend: boolean = false; 
+    private connected: boolean = false;
 
     private constructor() {
         super();
+        this.state = { joinAttempted: false };
+        this.sockets = {};
     }
 
     public static getInstance(): Networking {
-        if (this.instance == null) {
+        if (this.instance == undefined) {
             this.instance = new Networking();
         }
 
@@ -25,11 +28,11 @@ export class Networking extends EventEmitter {
 
     public handleSignalingMessage(data: string) {
         if (data == "HEARTBEAT") {
-            Networking.signalingSocket?.write("HEARTBEAT");
+            this.sockets.signaling?.write("HEARTBEAT");
             return; // No need for any further action.
         }
 
-        let deserialized: SignalingServerResponse = JSON.parse(data);
+        let deserialized: ServerResponse = JSON.parse(data);
 
         if (deserialized.response == "success") {
             if (deserialized.type == "created") {
@@ -41,38 +44,38 @@ export class Networking extends EventEmitter {
                 });
             }
 
-            if (deserialized.type == "joined") {
-                if (!deserialized.host) {
-                    
+            else if (deserialized.type == "connected") {
+                if (!deserialized.waiting) {
+                    this.establishConnection();
                 }
 
-                Networking.connected = true;
+                this.connected = true;
                 this.emit("stateChange", {
-                    newState: "joined",
+                    newState: "connected",
                     me: true,
-                    host: deserialized.host
+                    host: deserialized.waiting
                 });
             }
 
-            if (deserialized.type == "switched") {
+            else if (deserialized.type == "switched") {
                 this.emit("hostChange", false); // false indicates the user is no longer the host
             }
 
-            if (deserialized.type == "left") {
-                Networking.connected = false;
-                Networking.signalingSocket?.destroy();
-                Networking.signalingSocket = undefined;
+            else if (deserialized.type == "disconnected") {
+                this.connected = false;
+                this.sockets.signaling?.destroy();
+                this.sockets.signaling = undefined;
 
                 this.emit("stateChange", {
-                    newState: "left",
+                    newState: "disconnected",
                     me: true
                 });
             }
 
-            if (deserialized.type == "ended") {
-                Networking.connected = false;
-                Networking.signalingSocket?.destroy();
-                Networking.signalingSocket = undefined;
+            else if (deserialized.type == "ended") {
+                this.connected = false;
+                this.sockets.signaling?.destroy();
+                this.sockets.signaling = undefined;
 
                 this.emit("stateChange", {
                     newState: "ended",
@@ -82,23 +85,26 @@ export class Networking extends EventEmitter {
         }
 
         else if (deserialized.response == "info") {
-            if (deserialized.type == "joined") {
-                // do something about it
-            }
-
-            if (deserialized.type == "switched") {
-                this.emit("hostChange", true); // true indicating the user is the new host
-            }
-
-            if (deserialized.type == "left") {
-                this.emit("stateChange", {
-                    newState: "left",
+            if (deserialized.type == "connected") {
+                this.emit("newState", {
+                    newState: "connected",
                     me: false
                 });
             }
 
-            if (deserialized.type == "ended") {
-                Networking.connected = false;
+            else if (deserialized.type == "switched") {
+                this.emit("hostChange", true); // true indicating the user is the new host
+            }
+
+            else if (deserialized.type == "disconnected") {
+                this.emit("stateChange", {
+                    newState: "disconnected",
+                    me: false
+                });
+            }
+
+            else if (deserialized.type == "ended") {
+                this.connected = false;
                 this.emit("stateChange", {
                     newState: "ended",
                     me: false
@@ -107,21 +113,131 @@ export class Networking extends EventEmitter {
         }
 
         else if (deserialized.response == "error") {
-            this.emit("error", deserialized?.reason);
+            this.emit("error", deserialized.reason);
+
+            if ((deserialized.reason?.search("meeting ID") != -1 || deserialized.reason?.search("password") != -1)
+                && this.state.joinAttempted) {
+                
+                this.state.joinAttempted = false;
+                this.state.id = undefined;
+                this.state.password = undefined;
+            }
+        }
+    }
+
+    public handleICEMessage(data: string) {
+        if (data == "HEARTBEAT") {
+            this.sockets.ice?.write("HEARTBEAT");
+            return; // No need for further action.
+        }
+
+        // Handle user message
+        if (data[0] == "C") {
+
+        // Handle server response
+        } else {
+            let deserialized: ServerResponse = JSON.parse(data);
+
+            if (deserialized.response == "success") {
+                if (deserialized.type == "connected") {
+                    
+                }
+
+                else if (deserialized.type == "disconnected") {
+
+                }
+            }
+
+            else if (deserialized.response == "info") {
+
+            }
+
+            else if (deserialized.response == "error") {
+
+            }
         }
     }
 
     public makeSignalingSocket() {
-        Networking.signalingSocket = new Socket();
+        this.sockets.signaling = new TCPSocket();
 
-        Networking.signalingSocket.on("data", (data) => handleSignalingMessage(data.toString()));
-        Networking.signalingSocket.on("error", () => {
-            Networking.signalingSocket?.destroy();
-            Networking.signalingSocket = undefined;
+        this.sockets.signaling.on("data", (data) => this.handleSignalingMessage(data.toString()));
+        this.sockets.signaling.on("error", () => {
+            this.sockets.signaling?.destroy();
+            this.sockets.signaling = undefined;
             this.emit("error", "Could not connect to signaling server.");
         });
 
-        Networking.signalingSocket.connect(5060, "127.0.0.1");
+        this.sockets.signaling.connect(5060, "127.0.0.1");
+    }
+
+    public async establishConnection() {
+        // Step 1. Get IP address
+        if (this.state.localAddress == undefined) {
+            this.state.localAddress = {
+                ip: await this.getIP()
+            }
+        }
+
+        // Step 2. Negotitate connection via ICE
+        this.negotiateConnection().then((remoteAddress) => {
+            // Step 3. Open a "generic" communication socket, and unlock send method
+
+        })
+
+        .catch((err) => {
+
+        });
+
+    }
+
+    /**
+     * This method attempts to get your public IP from the STUN service.
+     * 
+     * @returns An IP address promise, which resolves to an IP address string
+     */
+    public getIP(): Promise<string> {
+        return new Promise<string>((resolve, reject) => {
+            let stunSocket: UDPSocket = createUDPSocket("udp4");
+
+            stunSocket.on("message", (data) => {
+                stunSocket.removeAllListeners();
+                resolve(data.toString());
+            });
+
+            stunSocket.on("error", () => {
+                stunSocket.removeAllListeners();
+                reject("Unable to get your IP address.");
+            });
+
+            stunSocket.send(Buffer.from("getIP"), 3478);
+        });
+    }
+
+    public negotiateConnection() {
+        return new Promise<Address>((resolve, reject) => {
+            let remoteIP: string | undefined;
+            let remotePort: number | undefined;
+
+            let iceSocket: TCPSocket = new TCPSocket();
+            iceSocket.connect(1673, "127.0.0.1");
+
+            iceSocket.on("data", (data) => {
+                this.handleICEMessage(data.toString());
+            });
+
+            iceSocket.on("error", () => {
+                iceSocket.removeAllListeners();
+                reject("Unable to negotiate a connection with remote peer.");
+            });
+
+            this.once("remoteIP", (ip: string) => { remoteIP = ip });
+            this.once("remotePort", (port: number) => { remotePort = port });
+            
+            this.once("negotiated", (type: ConnectionType) => {
+
+            });
+        });
     }
 
 
@@ -134,11 +250,11 @@ export class Networking extends EventEmitter {
      * Upon improper usage, exceptions will be thrown.
      */
     public start() {
-        if (Networking.signalingSocket == undefined) {
-            makeSignalingSocket();
+        if (this.sockets.signaling == undefined) {
+            this.makeSignalingSocket();
         }
 
-        Networking.signalingSocket?.write(JSON.stringify({request: "start"}));
+        this.sockets.signaling?.write(JSON.stringify({request: "start"}));
     }
 
     /**
@@ -146,11 +262,15 @@ export class Networking extends EventEmitter {
      * Upon improper usage, exceptions will be thrown.
      */
     public join(id: string, password: string) {
-        if (Networking.signalingSocket == undefined) {
-            makeSignalingSocket();
+        if (this.sockets.signaling == undefined) {
+            this.makeSignalingSocket();
         }
 
-        Networking.signalingSocket?.write(JSON.stringify({request: "join", id: id, password: password}));
+        this.sockets.signaling?.write(JSON.stringify({request: "join", id: id, password: password}));
+
+        this.state.id = id;
+        this.state.password = password;
+        this.state.joinAttempted = true;
     }
 
     /**
@@ -158,11 +278,11 @@ export class Networking extends EventEmitter {
      * Upon improper usage, exceptions will be thrown.
      */
     public switch(): void {
-        if (Networking.connected != true) {
+        if (this.connected != true) {
             throw new Error();
         }
 
-        Networking.signalingSocket?.write(JSON.stringify({request: "switch"}));
+        this.sockets.signaling?.write(JSON.stringify({request: "switch"}));
     }
 
     /**
@@ -170,11 +290,11 @@ export class Networking extends EventEmitter {
      * Upon improper usage, exceptions will be thrown.
      */
     public leave(): void {
-        if (Networking.connected != true) {
+        if (this.connected != true) {
             throw new Error();
         }
 
-        Networking.signalingSocket?.write(JSON.stringify({request: "leave"}));
+        this.sockets.signaling?.write(JSON.stringify({request: "leave"}));
     }
 
     /**
@@ -182,11 +302,11 @@ export class Networking extends EventEmitter {
      * Upon improper usage, exceptions will be thrown.
      */
     public end(): void {
-        if (Networking.connected) {
+        if (this.connected != true) {
             throw new Error();
         }
 
-        Networking.signalingSocket?.write(JSON.stringify({request: "end"}));
+        this.sockets.signaling?.write(JSON.stringify({request: "end"}));
     }
 
     /**
@@ -196,7 +316,7 @@ export class Networking extends EventEmitter {
      * Upon improper usage, exceptions will be thrown.
      */
     public send(): void {
-        if (Networking.canSend != true) {
+        if (this.canSend != true) {
             throw new Error();
         }
 
@@ -240,34 +360,52 @@ export class Networking extends EventEmitter {
     }
 };
 
-type SignalingServerResponse = {
-    response: SignalingResponseStatus;
-    type: SignalingResponseType;
-    reason?: string; // Used for errors
+  /////////////////////////////////////////
+ ///          TypeScript Types         ///
+/////////////////////////////////////////
 
+type NetworkingSockets = {
+    signaling?: TCPSocket;
+    ice?: TCPSocket;
+    communication?: UDPSocket;
+};
+
+type NetworkingState = {
+    // Signaling State
     id?: string;
     password?: string;
     host?: boolean;
-}
+
+    // ICE State
+    localAddress?: Address;
+    remoteAddress?: Address;
+
+    joinAttempted: boolean;
+};
 
 export type SignalingState = {
-    newState: SignalingResponseType;
+    newState: ResponseType;
     me: boolean;
 
     id?: string;
     password?: string;
     host?: boolean;
-}
+};
 
-type SignalingResponseStatus = "success" | "info" | "error";
-type SignalingResponseType = "created" | "joined" | "switched" | "left" | "ended";
+type ServerResponse = {
+    response: ResponseStatus;
+    type: ResponseType;
+    reason?: string; // Used for errors
 
-// Perhaps make a better function system?
+    id?: string;
+    password?: string;
+    waiting?: boolean;
+};
 
-function makeSignalingSocket() {
-    Networking.getInstance().makeSignalingSocket();
-}
+type Address = {
+    ip: string;
+    port?: number;
+};
 
-function handleSignalingMessage(data: string) {
-    Networking.getInstance().handleSignalingMessage(data);
-}
+type ResponseStatus = "success" | "info" | "error";
+type ResponseType = "created" | "connected" | "switched" | "disconnected" | "ended";
