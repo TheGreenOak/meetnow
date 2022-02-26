@@ -380,7 +380,7 @@ class Signaling(TCPServer):
 
         try:
             if second_user_sock:
-                second_user_sock.send(serialize({"response": "info", "type": "left"}))
+                second_user_sock.send(serialize({"response": "info", "type": "disconnected"}))
         except BrokenPipeError:
             self.disconnect_client(second_user)
             return True
@@ -546,10 +546,10 @@ class Signaling(TCPServer):
                 
                 other_client = self.join_meeting(addr, request["id"], request["password"])
                 if other_client:
-                    responses.append((sock, serialize({"response": "success","type": "joined", "host": False})))
-                    responses.append((other_client, serialize({"response": "info", "type": "joined"})))
+                    responses.append((sock, serialize({"response": "success","type": "connected", "waiting": False})))
+                    responses.append((other_client, serialize({"response": "info", "type": "connected"})))
                 else:
-                    responses.append((sock, serialize({"response": "success", "type": "joined", "host": True})))
+                    responses.append((sock, serialize({"response": "success", "type": "connected", "waiting": True})))
             
             elif request["request"] == "switch":
                 new_host = self.switch_host(addr)
@@ -558,9 +558,9 @@ class Signaling(TCPServer):
             
             elif request["request"] == "leave":
                 remaining_user = self.leave_meeting(addr)
-                responses.append((sock, serialize({"response": "success", "type" : "left"})))
+                responses.append((sock, serialize({"response": "success", "type" : "disconnected"})))
                 if remaining_user:
-                    responses.append((remaining_user[1], serialize({"response": "info", "type": "left"})))
+                    responses.append((remaining_user[1], serialize({"response": "info", "type": "disconnected"})))
 
             elif request["request"] == "end":
                 remaining_user = self.end_meeting(addr)
