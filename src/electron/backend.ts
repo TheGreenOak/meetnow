@@ -20,144 +20,15 @@ export class Networking extends EventEmitter {
         this.sockets = {};
     }
 
+    /**
+     * Acquire the singleton instance of this class.
+     */
     public static getInstance(): Networking {
         if (this.instance == undefined) {
             this.instance = new Networking();
         }
 
         return this.instance;
-    }
-
-    public handleSignalingMessage(data: string) {
-        if (data == "HEARTBEAT") {
-            this.sockets.signaling?.write("HEARTBEAT");
-            return; // No need for any further action.
-        }
-
-        let deserialized: ServerResponse = JSON.parse(data);
-
-        if (deserialized.response == "success") {
-            if (deserialized.type == "created") {
-                this.emit("stateChange", {
-                    newState: "started",
-                    me: true,
-                    id: deserialized.id,
-                    password: deserialized.password
-                });
-            }
-
-            else if (deserialized.type == "connected") {
-                if (!deserialized.waiting) {
-                    this.establishConnection();
-                }
-
-                this.state.connected = true;
-                this.emit("stateChange", {
-                    newState: "connected",
-                    me: true,
-                    host: deserialized.waiting
-                });
-            }
-
-            else if (deserialized.type == "switched") {
-                this.emit("hostChange", false); // false indicates the user is no longer the host
-            }
-
-            else if (deserialized.type == "disconnected") {
-                this.state.connected = false;
-                this.sockets.signaling?.destroy();
-                this.sockets.signaling = undefined;
-
-                this.emit("stateChange", {
-                    newState: "disconnected",
-                    me: true
-                });
-            }
-
-            else if (deserialized.type == "ended") {
-                this.state.connected = false;
-                this.sockets.signaling?.destroy();
-                this.sockets.signaling = undefined;
-
-                this.emit("stateChange", {
-                    newState: "ended",
-                    me: true
-                });
-            }
-        }
-
-        else if (deserialized.response == "info") {
-            if (deserialized.type == "connected") {
-                this.emit("newState", {
-                    newState: "connected",
-                    me: false
-                });
-            }
-
-            else if (deserialized.type == "switched") {
-                this.emit("hostChange", true); // true indicating the user is the new host
-            }
-
-            else if (deserialized.type == "disconnected") {
-                this.emit("stateChange", {
-                    newState: "disconnected",
-                    me: false
-                });
-            }
-
-            else if (deserialized.type == "ended") {
-                this.state.connected = false;
-                this.emit("stateChange", {
-                    newState: "ended",
-                    me: false
-                });
-            }
-        }
-
-        else if (deserialized.response == "error") {
-            this.emit("error", deserialized.reason);
-
-            if ((deserialized.reason?.search("meeting ID") != -1 || deserialized.reason?.search("password") != -1)
-                && this.state.joinAttempted) {
-                
-                this.state.joinAttempted = false;
-                this.state.id = undefined;
-                this.state.password = undefined;
-            }
-        }
-    }
-
-    public handleICEMessage(data: string) {
-        if (data == "HEARTBEAT") {
-            this.sockets.ice?.write("HEARTBEAT");
-            return; // No need for further action.
-        }
-
-        // Handle user message
-        if (data[0] == "C") {
-
-        // Handle server response
-        } else {
-            let deserialized: ServerResponse = JSON.parse(data);
-
-            if (deserialized.response == "success") {
-                if (deserialized.type == "connected") {
-                    
-                }
-
-                else if (deserialized.type == "disconnected") {
-
-                }
-            }
-
-            else if (deserialized.response == "info") {
-
-            }
-
-            else if (deserialized.response == "error") {
-
-            }
-        }
     }
 
     public makeSignalingSocket() {
@@ -242,9 +113,148 @@ export class Networking extends EventEmitter {
         });
     }
 
+      /////////////////////////////////////////
+     ///      SOCKET MESSAGE HANDLERS      ///
+    /////////////////////////////////////////
+
+    public handleSignalingMessage(data: string) {
+        if (data == "HEARTBEAT") {
+            this.sockets.signaling?.write("HEARTBEAT");
+            return; // No need for any further action.
+        }
+
+        let deserialized: ServerResponse = JSON.parse(data);
+
+        if (deserialized.response == "success") {
+            if (deserialized.type == "created") {
+                this.emit("stateChange", {
+                    newState: "started",
+                    me: true,
+                    id: deserialized.id,
+                    password: deserialized.password
+                });
+            }
+
+            else if (deserialized.type == "connected") {
+                if (!deserialized.waiting) {
+                    this.establishConnection();
+                }
+
+                this.state.connected = true;
+                this.state.host = deserialized.waiting;
+                this.state.joinAttempted = false;
+
+                this.emit("stateChange", {
+                    newState: "connected",
+                    me: true,
+                    host: deserialized.waiting
+                });
+            }
+
+            else if (deserialized.type == "switched") {
+                this.emit("hostChange", false); // false indicates the user is no longer the host
+            }
+
+            else if (deserialized.type == "disconnected") {
+                this.state.connected = false;
+                this.sockets.signaling?.destroy();
+                this.sockets.signaling = undefined;
+
+                this.emit("stateChange", {
+                    newState: "disconnected",
+                    me: true
+                });
+            }
+
+            else if (deserialized.type == "ended") {
+                this.state.connected = false;
+                this.sockets.signaling?.destroy();
+                this.sockets.signaling = undefined;
+
+                this.emit("stateChange", {
+                    newState: "ended",
+                    me: true
+                });
+            }
+        }
+
+        else if (deserialized.response == "info") {
+            if (deserialized.type == "connected") {
+                this.emit("newState", {
+                    newState: "connected",
+                    me: false
+                });
+            }
+
+            else if (deserialized.type == "switched") {
+                this.emit("hostChange", true); // true indicating the user is the new host
+            }
+
+            else if (deserialized.type == "disconnected") {
+                this.emit("stateChange", {
+                    newState: "disconnected",
+                    me: false
+                });
+            }
+
+            else if (deserialized.type == "ended") {
+                this.state.connected = false;
+                this.emit("stateChange", {
+                    newState: "ended",
+                    me: false
+                });
+            }
+        }
+
+        else if (deserialized.response == "error") {
+            this.emit("error", deserialized.reason);
+
+            // If we have attempted joining a meeting, and we got a join error, invalidate the local meeting state.
+            if ((deserialized.reason?.search("meeting ID") != -1 || deserialized.reason?.search("password") != -1)
+                && this.state.joinAttempted) {
+                
+                this.state.joinAttempted = false;
+                this.state.id = undefined;
+                this.state.password = undefined;
+            }
+        }
+    }
+
+    public handleICEMessage(data: string) {
+        if (data == "HEARTBEAT") {
+            this.sockets.ice?.write("HEARTBEAT");
+            return; // No need for further action.
+        }
+
+        // Handle user message
+        if (data[0] == "C") {
+
+        // Handle server response
+        } else {
+            let deserialized: ServerResponse = JSON.parse(data);
+
+            if (deserialized.response == "success") {
+                if (deserialized.type == "connected") {
+                    
+                }
+
+                else if (deserialized.type == "disconnected") {
+
+                }
+            }
+
+            else if (deserialized.response == "info") {
+
+            }
+
+            else if (deserialized.response == "error") {
+
+            }
+        }
+    }
 
       /////////////////////////////////////////
-     ///        CLIENT-SIDE METHODS        ///
+     ///         RENDERER METHODS          ///
     /////////////////////////////////////////
 
     /**
@@ -268,7 +278,7 @@ export class Networking extends EventEmitter {
      * Upon improper usage, exceptions will be thrown.
      */
     public join(id: string, password: string) {
-        if (this.state.connected) {
+        if (this.state.connected || this.state.joinAttempted) {
             throw new Error();
         }
 
@@ -312,7 +322,7 @@ export class Networking extends EventEmitter {
      * Upon improper usage, exceptions will be thrown.
      */
     public end(): void {
-        if (this.state.connected != true) {
+        if (this.state.connected != true || this.state.host == false) {
             throw new Error();
         }
 
