@@ -2,6 +2,33 @@ import { Socket as UDPSocket, createSocket as createUDPSocket } from "dgram";
 import { Socket as TCPSocket } from "net";
 import { EventEmitter } from "events";
 
+const DEFAULT_IP = "127.0.0.1";
+
+/*
+yeho's little think box
+-----------------------
+
+P2P/TURN Protocol:
+First char is the identifier char
+
+A - AUDIO
+V - VIDEO
+C - CHAT MESSAGE
+I - INFO (Used for identification)
+F - GOODBYE (F stands for FIN)
+T - TEST
+
+------------------------
+
+establishConnection() ; emits event "ready", or "fail"
+  -> Gets IP address (if not in cache) | getIP(): Promise<string>
+  -> Negotiates connection with remote client | negotiateConnection(): Promise<Address>
+    -> Gets IP & port from the remote
+    -> Tests connection | testConnection(): Promise<void> ; error means failed test
+    -> 3 tests allowed before falling back to TURN
+  -> Creates communication socket
+*/
+
 /**
  * Stateful, event emitting, singleton class for handling all client-side this.
  */
@@ -15,7 +42,8 @@ export class Networking extends EventEmitter {
 
         this.state = {
             connected: false,
-            joinAttempted: false
+            joinAttempted: false,
+            attempts: 0
         };
         this.sockets = {};
     }
@@ -31,7 +59,13 @@ export class Networking extends EventEmitter {
         return this.instance;
     }
 
-    public makeSignalingSocket() {
+    /**
+     * This method makes a new Signaling socket, and binds all event listeners.
+     * It will also automatically attempt connecting to the Signaling server.
+     * 
+     * Note, if the connection fails, the socket will be destroyed, and an error event will be emitted.
+     */
+    private makeSignalingSocket() {
         this.sockets.signaling = new TCPSocket();
 
         this.sockets.signaling.on("data", (data) => this.handleSignalingMessage(data.toString()));
@@ -41,25 +75,58 @@ export class Networking extends EventEmitter {
             this.emit("error", "Could not connect to signaling server.");
         });
 
-        this.sockets.signaling.connect(5060, "127.0.0.1");
+        this.sockets.signaling.connect(5060, DEFAULT_IP);
     }
 
-    public async establishConnection() {
+    /**
+     * This methods will make a new communication socket, and bind all event listeners to it.
+     * 
+     * @param addr The address of the remote
+     */
+    private makeCommunicationSocket(addr: Address) {
+        this.sockets.communication = createUDPSocket("udp4");
+        this.sockets.communication.connect(addr.port, addr.ip);
+
+        this.sockets.communication.on("message", (data) => { this.emit("message", data); });
+        this.sockets.communication.on("error", () => {
+            this.sockets.communication?.close();
+            this.sockets.communication = undefined;
+            this.emit("comm-error", "There was an error with the UDP communication socket.");
+        });
+
+        this.sockets.communication.once("connect", () => { this.emit("ready"); });
+    }
+
+    /**
+     * This method will attempt to establish a P2P/TURN connection with the other user.
+     * 
+     * Firstly, it will attempt to get your public IP address.
+     * Then, it will attempt to negotiate a connection with the other user.
+     * Once the details have been negotiated and tested, a UDP socket will be created,
+     * and the connection will be established.
+     * 
+     * The public IP will get stored in cache.
+     */
+    private async establishConnection() {
         // Step 1. Get IP address
         if (this.state.localAddress == undefined) {
-            this.state.localAddress = {
-                ip: await this.getIP()
-            }
+            this.getIP().then((ip) => {
+                this.state.localAddress = { ip: ip, port: -1 };  
+            })
+
+            .catch((err) => {
+                this.makeCommunicationSocket({ip: DEFAULT_IP, port: 3479});
+                return;
+            });
         }
 
         // Step 2. Negotitate connection via ICE
         this.negotiateConnection().then((remoteAddress) => {
-            // Step 3. Open a "generic" communication socket
-
+            this.makeCommunicationSocket(remoteAddress); // Step 3. Create the socket
         })
 
         .catch((err) => {
-
+            this.emit("comm-error", "There was an error with the UDP communication socket.");
         });
     }
 
@@ -68,16 +135,18 @@ export class Networking extends EventEmitter {
      * 
      * @returns An IP address promise, which resolves to an IP address string
      */
-    public getIP(): Promise<string> {
+    private getIP(): Promise<string> {
         return new Promise<string>((resolve, reject) => {
             let stunSocket: UDPSocket = createUDPSocket("udp4");
-            stunSocket.connect(3478);
+            stunSocket.connect(3478, DEFAULT_IP);
 
             stunSocket.once("message", (data) => {
+                stunSocket.removeAllListeners();
                 resolve(data.toString());
             });
 
             stunSocket.once("error", () => {
+                stunSocket.removeAllListeners();
                 reject("Unable to get your IP address.");
             });
 
@@ -87,37 +156,72 @@ export class Networking extends EventEmitter {
         });
     }
 
-    public negotiateConnection() {
+    private negotiateConnection() {
         return new Promise<Address>((resolve, reject) => {
-            let remoteIP: string | undefined;
-            let remotePort: number | undefined;
+            this.sockets.ice = new TCPSocket();
+            this.sockets.ice.connect(1673, DEFAULT_IP);
 
-            let iceSocket: TCPSocket = new TCPSocket();
-            iceSocket.connect(1673, "127.0.0.1");
-
-            iceSocket.on("data", (data) => {
-                this.handleICEMessage(data.toString());
+            this.sockets.ice.on("data", (data) => {
+                if (this.handleICEMessage(data.toString())) {
+                    this.sockets.ice?.removeAllListeners();
+                    
+                }
             });
 
-            iceSocket.on("error", () => {
-                iceSocket.removeAllListeners();
+            this.sockets.ice.on("error", () => {
+                this.sockets.ice?.removeAllListeners();
                 reject("Unable to negotiate a connection with remote peer.");
             });
-
-            this.once("remoteIP", (ip: string) => { remoteIP = ip });
-            this.once("remotePort", (port: number) => { remotePort = port });
-            
-            this.once("negotiated", (type: ConnectionType) => {
-
-            });
         });
+    }
+
+    /**
+     * This method will test the remote address by sending two test messages.
+     * 
+     * If the promise resolved, the connection succeded. Otherwise, it failed upon being rejected.
+     */
+    private testConnection(): Promise<void> {
+        return new Promise<void>((resolve, reject) => {
+            // Unimplemented
+        });
+    }
+
+    /**
+     * This method will terminate the P2P/TURN connection that has been established.
+     * Note, after calling this, you will no longer be able to communicate with the other user.
+     */
+    private async terminateConnection() {
+        if (this.sockets.communication == undefined) {
+            throw new Error();
+        }
+
+        this.sockets.communication.send("F");
+        this.sockets.communication.removeAllListeners();
+        this.sockets.communication.close();
+        this.sockets.communication = undefined;
+    }
+
+    /**
+     * This method will set the meeting state (id, password, host) to undefined.
+     * Quick and handy shortcut, nothing else.
+     */
+    private invalidateMeetingState() {
+        this.state.id = undefined;
+        this.state.password = undefined;
+        this.state.host = undefined;
     }
 
       /////////////////////////////////////////
      ///      SOCKET MESSAGE HANDLERS      ///
     /////////////////////////////////////////
 
-    public handleSignalingMessage(data: string) {
+    /**
+     * This methods handles any and all incoming signaling messages.
+     * If necessary, it will emit events according to the message.
+     * 
+     * @param data The message data.
+     */
+    private handleSignalingMessage(data: string) {
         if (data == "HEARTBEAT") {
             this.sockets.signaling?.write("HEARTBEAT");
             return; // No need for any further action.
@@ -125,6 +229,7 @@ export class Networking extends EventEmitter {
 
         let deserialized: ServerResponse = JSON.parse(data);
 
+        // Handle server response to requests
         if (deserialized.response == "success") {
             if (deserialized.type == "created") {
                 this.emit("stateChange", {
@@ -152,11 +257,15 @@ export class Networking extends EventEmitter {
             }
 
             else if (deserialized.type == "switched") {
+                this.state.host = false;
                 this.emit("hostChange", false); // false indicates the user is no longer the host
             }
 
             else if (deserialized.type == "disconnected") {
                 this.state.connected = false;
+                this.invalidateMeetingState();
+                this.terminateConnection();
+
                 this.sockets.signaling?.destroy();
                 this.sockets.signaling = undefined;
 
@@ -168,6 +277,9 @@ export class Networking extends EventEmitter {
 
             else if (deserialized.type == "ended") {
                 this.state.connected = false;
+                this.invalidateMeetingState();
+                this.terminateConnection();
+
                 this.sockets.signaling?.destroy();
                 this.sockets.signaling = undefined;
 
@@ -178,8 +290,11 @@ export class Networking extends EventEmitter {
             }
         }
 
+        // Handle server events
         else if (deserialized.response == "info") {
             if (deserialized.type == "connected") {
+                this.establishConnection();
+
                 this.emit("newState", {
                     newState: "connected",
                     me: false
@@ -187,10 +302,14 @@ export class Networking extends EventEmitter {
             }
 
             else if (deserialized.type == "switched") {
+                this.state.host = true;
                 this.emit("hostChange", true); // true indicating the user is the new host
             }
 
             else if (deserialized.type == "disconnected") {
+                this.state.host = true;
+                this.terminateConnection();
+                
                 this.emit("stateChange", {
                     newState: "disconnected",
                     me: false
@@ -199,6 +318,9 @@ export class Networking extends EventEmitter {
 
             else if (deserialized.type == "ended") {
                 this.state.connected = false;
+                this.invalidateMeetingState();
+                this.terminateConnection();
+
                 this.emit("stateChange", {
                     newState: "ended",
                     me: false
@@ -206,6 +328,7 @@ export class Networking extends EventEmitter {
             }
         }
 
+        // Handle request errors
         else if (deserialized.response == "error") {
             this.emit("error", deserialized.reason);
 
@@ -214,16 +337,21 @@ export class Networking extends EventEmitter {
                 && this.state.joinAttempted) {
                 
                 this.state.joinAttempted = false;
-                this.state.id = undefined;
-                this.state.password = undefined;
+                this.invalidateMeetingState();
             }
         }
     }
 
-    public handleICEMessage(data: string) {
+    /**
+     * This method handles any and all incoming ICE messages.
+     * 
+     * @param data The message data.
+     * @returns If connection details were tested and approved.
+     */
+    private handleICEMessage(data: string): boolean {
         if (data == "HEARTBEAT") {
             this.sockets.ice?.write("HEARTBEAT");
-            return; // No need for further action.
+            return false; // No need for further action.
         }
 
         // Handle user message
@@ -244,13 +372,21 @@ export class Networking extends EventEmitter {
             }
 
             else if (deserialized.response == "info") {
+                if (deserialized.type == "connected") {
 
+                }
+
+                else if (deserialized.type == "disconnected") {
+
+                }
             }
 
             else if (deserialized.response == "error") {
 
             }
         }
+
+        return false;
     }
 
       /////////////////////////////////////////
@@ -276,6 +412,9 @@ export class Networking extends EventEmitter {
     /**
      * This method will attempt to join a meeting.
      * Upon improper usage, exceptions will be thrown.
+     * 
+     * @param id The meeting ID.
+     * @param password The meeting password.
      */
     public join(id: string, password: string) {
         if (this.state.connected || this.state.joinAttempted) {
@@ -285,12 +424,12 @@ export class Networking extends EventEmitter {
         if (this.sockets.signaling == undefined) {
             this.makeSignalingSocket();
         }
-
-        this.sockets.signaling?.write(JSON.stringify({request: "join", id: id, password: password}));
-
+        
         this.state.id = id;
         this.state.password = password;
         this.state.joinAttempted = true;
+
+        this.sockets.signaling?.write(JSON.stringify({request: "join", id: id, password: password}));
     }
 
     /**
@@ -331,9 +470,11 @@ export class Networking extends EventEmitter {
 
     /**
      * This method will send a message to the user's peer.
-     * It will only work after being unlocked  by a join method.
+     * You may call this method after a "ready" event has been emitted.
      * 
      * Upon improper usage, exceptions will be thrown.
+     * 
+     * @param message The message to send.
      */
     public send(data: string): void {
         if (this.sockets.communication == undefined) {
@@ -345,7 +486,7 @@ export class Networking extends EventEmitter {
 };
 
   /////////////////////////////////////////
- ///          TypeScript Types         ///
+ ///          TYPESCRIPT TYPES         ///
 /////////////////////////////////////////
 
 type NetworkingSockets = {
@@ -364,6 +505,7 @@ type NetworkingState = {
     joinAttempted: boolean;
 
     // ICE State
+    attempts: number;
     localAddress?: Address;
     remoteAddress?: Address;
 };
@@ -389,7 +531,7 @@ type ServerResponse = {
 
 type Address = {
     ip: string;
-    port?: number;
+    port: number;
 };
 
 type ResponseStatus = "success" | "info" | "error";
