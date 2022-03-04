@@ -78,6 +78,10 @@ export class Networking extends EventEmitter {
         return this.instance;
     }
 
+      /////////////////////////////////////////
+     ///         SOCKET GENERATORS         ///
+    /////////////////////////////////////////
+
     /**
      * This method makes a new Signaling socket, and binds all event listeners.
      * It will also automatically attempt connecting to the Signaling server.
@@ -109,12 +113,14 @@ export class Networking extends EventEmitter {
 
         // Handle messages
         this.sockets.communication.on("message", (data) => {
-            if (data.toString() == "HEARTBEAT") {
+            let msg = data.toString();
+
+            if (msg == "HEARTBEAT") {
                 this.sockets.communication?.send("HEARTBEAT");
             }
 
-            if (data.toString()[0] != "C") {
-                this.emit("message", data);
+            if (msg[0] == "C") {
+                this.emit("message", msg.substring(1));
             }
         });
 
@@ -138,6 +144,10 @@ export class Networking extends EventEmitter {
             this.emit("ready");
         });
     }
+
+      /////////////////////////////////////////
+     ///         PEER COMMUNICATION        ///
+    /////////////////////////////////////////
 
     /**
      * This method will attempt to establish a P2P/TURN connection with the other user.
@@ -175,6 +185,66 @@ export class Networking extends EventEmitter {
     }
 
     /**
+     * This method will terminate the P2P/TURN connection that has been established.
+     * Note, after calling this, you will no longer be able to communicate with the other user.
+     */
+    private async terminateConnection() {
+        if (this.sockets.communication == undefined) {
+            throw new Error();
+        }
+
+        this.sockets.communication.send("F");
+        this.sockets.communication.removeAllListeners();
+        this.sockets.communication.close();
+        this.sockets.communication = undefined;
+
+        this.state.remoteAddress = undefined;
+        this.state.localAddress!.port = -1;
+    }
+
+      /////////////////////////////////////////
+     ///      ICE NEGOTIATION METHODS      ///
+    /////////////////////////////////////////
+
+    /**
+     * This methods attempt to negotiate a connection with the other peer.
+     * Upon success, it will return an address.
+     *
+     * @returns A promise, which resolves to an IP and port
+     */
+    private negotiateConnection(): Promise<Address> {
+        return new Promise<Address>((resolve, reject) => {
+            this.sockets.ice = new TCPSocket();
+            this.sockets.ice.connect(PORTS.ICE, DEFAULT_IP);
+
+            this.sockets.ice.on("data", (data) => {
+                this.handleICEMessage(data.toString()).then((success) => {
+                    if (success) {
+                        this.terminateICE();
+                        resolve(this.state.remoteAddress!);
+                    }
+                })
+
+                .catch(() => {
+                    this.terminateICE();
+                    reject("Unable to negotiate a connection with remote peer.");
+                });
+            });
+
+            this.sockets.ice.once("error", () => {
+                this.terminateICE();
+                reject("Unable to negotiate a connection with remote peer.");
+            });
+
+            this.sockets.ice.write(JSON.stringify({
+                request: "connect",
+                id: this.state.id,
+                password: this.state.password
+            }));
+        });
+    }
+
+    /**
      * This method attempts to get your public IP from the STUN service.
      *
      * @returns An IP address promise, which resolves to an IP address string
@@ -203,50 +273,10 @@ export class Networking extends EventEmitter {
     }
 
     /**
-     * This methods attempt to negotiate a connection with the other peer.
-     * Upon success, it will return an address.
-     *
-     * @returns A promise, which resolves to an IP and port
+     * This method will generate a random source port.
      */
-    private negotiateConnection(): Promise<Address> {
-        return new Promise<Address>((resolve, reject) => {
-            this.sockets.ice = new TCPSocket();
-            this.sockets.ice.connect(PORTS.ICE, DEFAULT_IP);
-
-            this.sockets.ice.on("data", (data) => {
-                this.handleICEMessage(data.toString()).then((success) => {
-                    if (success) {
-                        this.sockets.ice?.removeAllListeners();
-                        this.sockets.ice?.destroy();
-                        this.sockets.ice = undefined;
-
-                        resolve(this.state.remoteAddress!);
-                    }
-                })
-
-                .catch(() => {
-                    this.sockets.ice?.removeAllListeners();
-                    this.sockets.ice?.destroy();
-                    this.sockets.ice = undefined;
-
-                    reject("Unable to negotiate a connection with remote peer.");
-                });
-            });
-
-            this.sockets.ice.once("error", () => {
-                this.sockets.ice?.removeAllListeners();
-                this.sockets.ice?.destroy();
-                this.sockets.ice = undefined;
-
-                reject("Unable to negotiate a connection with remote peer.");
-            });
-
-            this.sockets.ice.write(JSON.stringify({
-                request: "connect",
-                id: this.state.id,
-                password: this.state.password
-            }));
-        });
+    private generatePort(): number {
+        return Math.floor(Math.random() * PORT_RANGE) + STARTING_PORT;
     }
 
     /**
@@ -260,37 +290,32 @@ export class Networking extends EventEmitter {
         });
     }
 
-    /**
-     * This method will terminate the P2P/TURN connection that has been established.
-     * Note, after calling this, you will no longer be able to communicate with the other user.
-     */
-    private async terminateConnection() {
-        if (this.sockets.communication == undefined) {
-            throw new Error();
-        }
+      /////////////////////////////////////////
+     ///            TERMINATORS            ///
+    /////////////////////////////////////////
 
-        this.sockets.communication.send("F");
-        this.sockets.communication.removeAllListeners();
-        this.sockets.communication.close();
-        this.sockets.communication = undefined;
+    /**
+     * This method properly disposes of the ICE socket, and resets the state associated with it.
+     */
+    private terminateICE(): void {
+        this.sockets.ice?.removeAllListeners();
+        this.sockets.ice?.destroy();
+        this.sockets.ice = undefined;
+
+        this.state.iceStep = undefined;
+        this.state.attempts = 0;
     }
 
     /**
      * This method will set the meeting state (id, password, host) to undefined.
      * Quick and handy shortcut, nothing else.
      */
-    private invalidateMeetingState() {
+    private invalidateMeetingState(): void {
         this.state.id = undefined;
         this.state.password = undefined;
         this.state.host = undefined;
     }
 
-    /**
-     * This method will generate a random source port.
-     */
-    private generatePort(): number {
-        return Math.floor(Math.random() * PORT_RANGE) + STARTING_PORT;
-    }
 
       /////////////////////////////////////////
      ///      SOCKET MESSAGE HANDLERS      ///
@@ -302,7 +327,7 @@ export class Networking extends EventEmitter {
      *
      * @param data The message data.
      */
-    private handleSignalingMessage(data: string) {
+    private handleSignalingMessage(data: string): void {
         if (data == "HEARTBEAT") {
             this.sockets.signaling?.write("HEARTBEAT");
             return; // No need for any further action.
@@ -436,6 +461,8 @@ export class Networking extends EventEmitter {
                 resolve(false); // No need for further action.
             }
 
+            console.log("ICE: " + data);
+
             // Handle user message
             if (data[0] == "C") {
                 data = data.substring(1);
@@ -527,6 +554,7 @@ export class Networking extends EventEmitter {
                     } else {
                         this.state.iceStep = "IP";
                         this.sockets.ice?.write("I" + this.state.localAddress!.ip);
+                        console.log("I" + this.state.localAddress!.ip);
                     }
                 }
 
@@ -535,7 +563,7 @@ export class Networking extends EventEmitter {
                 }
             }
 
-            resolve(false);
+            reject("Client sent an invalid message");
         });
     }
 
@@ -547,7 +575,7 @@ export class Networking extends EventEmitter {
      * Starts a new meeting, and automatically joins it.
      * Upon improper usage, exceptions will be thrown.
      */
-    public start() {
+    public start(): void {
         if (this.state.connected) {
             throw new Error();
         }
@@ -566,7 +594,7 @@ export class Networking extends EventEmitter {
      * @param id The meeting ID.
      * @param password The meeting password.
      */
-    public join(id: string, password: string) {
+    public join(id: string, password: string): void {
         if (this.state.connected || this.state.joinAttempted) {
             throw new Error();
         }
