@@ -280,7 +280,7 @@ class ICE(TCPServer):
 
         try:
             if second_user_sock:
-                second_user_sock.send(serialize({"response": "info", "type": "left"}))
+                second_user_sock.send(serialize({"response": "info", "type": "left"}).encode())
         except BrokenPipeError:
             self.disconnect_client(second_user)
             return True
