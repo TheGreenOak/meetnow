@@ -535,8 +535,8 @@ export class Networking extends EventEmitter {
                     // Otherwise, we need to send our port as-well.
                     } else {
                         do {
-                            this.state.localAddress!.port = parseInt(data.substring(1));
-                        } while (this.state.localAddress!.port != this.state.remoteAddress!.port);
+                            this.state.localAddress!.port = this.generatePort();
+                        } while (this.state.localAddress!.port == this.state.remoteAddress!.port);
 
                         this.state.iceStep = "PORT";
                         this.sockets.ice?.write("AP" + this.state.localAddress!.port);
