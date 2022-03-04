@@ -144,8 +144,7 @@ class Turn(UDPServer):
         for i in range(len(addresses)):
 
             address = addresses[i]
-            data = "S" + data_to_send[i]
-            data = data.encode()
+            data = data_to_send[i].encode()
             self.send(address, data)
 
     def forward(self, address, data):
@@ -156,7 +155,7 @@ class Turn(UDPServer):
         address (tuple of str and int): The address of the user to send to.
         data (str): The data to forward.
         """
-        data = "U" + data
+        data = "C" + data
         data = data.encode()
         other_user = self.users[address]["peer"]
 
