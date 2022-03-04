@@ -257,7 +257,7 @@ export class Networking extends EventEmitter {
             stunSocket.once("message", (data) => {
                 stunSocket.removeAllListeners();
                 stunSocket.close();
-                resolve(data.toString());
+                resolve(JSON.parse(data.toString()).ip);
             });
 
             stunSocket.once("error", () => {
@@ -543,6 +543,10 @@ export class Networking extends EventEmitter {
                     }
                 }
 
+                else {
+                    reject("Client sent an invalid message");
+                }
+
             // Handle server response
             } else {
                 let deserialized: ServerResponse = JSON.parse(data);
@@ -563,7 +567,7 @@ export class Networking extends EventEmitter {
                 }
             }
 
-            reject("Client sent an invalid message");
+            return false;
         });
     }
 
