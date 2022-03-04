@@ -239,7 +239,7 @@ class ICE(TCPServer):
         del user["id"]
 
         if other_user:
-            return other_user_address, other_user
+            return other_user_address, other_user["socket"]
 
 
     def disconnect_client(self, address):
