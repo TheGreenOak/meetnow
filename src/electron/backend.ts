@@ -2,7 +2,16 @@ import { Socket as UDPSocket, createSocket as createUDPSocket } from "dgram";
 import { Socket as TCPSocket } from "net";
 import { EventEmitter } from "events";
 
-const DEFAULT_IP = "127.0.0.1";
+const DEFAULT_IP = "meetnow.yeho.dev";
+const STARTING_PORT = 34200;
+const PORT_RANGE = 99;
+
+const PORTS = {
+    SIGNALING: 5060,
+    STUN: 3478,
+    ICE: 1673,
+    TURN: 3479
+}
 
 /*
 yeho's little think box
@@ -72,7 +81,7 @@ export class Networking extends EventEmitter {
     /**
      * This method makes a new Signaling socket, and binds all event listeners.
      * It will also automatically attempt connecting to the Signaling server.
-     * 
+     *
      * Note, if the connection fails, the socket will be destroyed, and an error event will be emitted.
      */
     private makeSignalingSocket() {
@@ -85,12 +94,12 @@ export class Networking extends EventEmitter {
             this.emit("error", "Could not connect to signaling server.");
         });
 
-        this.sockets.signaling.connect(5060, DEFAULT_IP);
+        this.sockets.signaling.connect(PORTS.SIGNALING, DEFAULT_IP);
     }
 
     /**
      * This methods will make a new communication socket, and bind all event listeners to it.
-     * 
+     *
      * @param addr The address of the remote
      */
     private makeCommunicationSocket(addr: Address, sourcePort?: number) {
@@ -98,37 +107,59 @@ export class Networking extends EventEmitter {
         if (sourcePort) this.sockets.communication.bind(sourcePort);
         this.sockets.communication.connect(addr.port, addr.ip);
 
-        this.sockets.communication.on("message", (data) => { this.emit("message", data); });
+        // Handle messages
+        this.sockets.communication.on("message", (data) => {
+            if (data.toString() == "HEARTBEAT") {
+                this.sockets.communication?.send("HEARTBEAT");
+            }
+
+            if (data.toString()[0] != "C") {
+                this.emit("message", data);
+            }
+        });
+
+        // Handle socket errors
         this.sockets.communication.on("error", () => {
             this.sockets.communication?.close();
             this.sockets.communication = undefined;
             this.emit("comm-error", "There was an error with the UDP communication socket.");
         });
 
-        this.sockets.communication.once("connect", () => { this.emit("ready"); });
+        // Send initial TURN message, and emit "ready"
+        this.sockets.communication.once("connect", () => {
+            if (this.state.remoteAddress?.ip == DEFAULT_IP) {
+                this.sockets.communication?.send(JSON.stringify({
+                    request: "connect",
+                    id: this.state.id,
+                    password: this.state.password
+                }));
+            }
+
+            this.emit("ready");
+        });
     }
 
     /**
      * This method will attempt to establish a P2P/TURN connection with the other user.
-     * 
+     *
      * Firstly, it will attempt to get your public IP address.
      * Then, it will attempt to negotiate a connection with the other user.
      * Once the details have been negotiated and tested, a UDP socket will be created,
      * and the connection will be established.
-     * 
+     *
      * The public IP will get stored in cache.
      */
     private async establishConnection() {
         // Step 1. Get IP address
         if (this.state.localAddress == undefined) {
             this.getIP().then((ip) => {
-                this.state.localAddress = { ip: ip, port: -1 };  
+                this.state.localAddress = { ip: ip, port: -1 };
             })
 
             .catch(() => {
                 this.state.remoteAddress = {
                     ip: DEFAULT_IP,
-                    port: 3479
+                    port: PORTS.TURN
                 };
             });
         }
@@ -145,13 +176,13 @@ export class Networking extends EventEmitter {
 
     /**
      * This method attempts to get your public IP from the STUN service.
-     * 
+     *
      * @returns An IP address promise, which resolves to an IP address string
      */
     private getIP(): Promise<string> {
         return new Promise<string>((resolve, reject) => {
             let stunSocket: UDPSocket = createUDPSocket("udp4");
-            stunSocket.connect(3478, DEFAULT_IP);
+            stunSocket.connect(PORTS.STUN, DEFAULT_IP);
 
             stunSocket.once("message", (data) => {
                 stunSocket.removeAllListeners();
@@ -174,22 +205,32 @@ export class Networking extends EventEmitter {
     /**
      * This methods attempt to negotiate a connection with the other peer.
      * Upon success, it will return an address.
-     * 
+     *
      * @returns A promise, which resolves to an IP and port
      */
     private negotiateConnection(): Promise<Address> {
         return new Promise<Address>((resolve, reject) => {
             this.sockets.ice = new TCPSocket();
-            this.sockets.ice.connect(1673, DEFAULT_IP);
+            this.sockets.ice.connect(PORTS.ICE, DEFAULT_IP);
 
             this.sockets.ice.on("data", (data) => {
-                if (this.handleICEMessage(data.toString())) {
+                this.handleICEMessage(data.toString()).then((success) => {
+                    if (success) {
+                        this.sockets.ice?.removeAllListeners();
+                        this.sockets.ice?.destroy();
+                        this.sockets.ice = undefined;
+
+                        resolve(this.state.remoteAddress!);
+                    }
+                })
+
+                .catch(() => {
                     this.sockets.ice?.removeAllListeners();
                     this.sockets.ice?.destroy();
                     this.sockets.ice = undefined;
 
-                    resolve(this.state.remoteAddress!);
-                }
+                    reject("Unable to negotiate a connection with remote peer.");
+                });
             });
 
             this.sockets.ice.once("error", () => {
@@ -210,7 +251,7 @@ export class Networking extends EventEmitter {
 
     /**
      * This method will test the remote address by sending two test messages.
-     * 
+     *
      * If the promise resolved, the connection succeded. Otherwise, it failed upon being rejected.
      */
     private testConnection(): Promise<void> {
@@ -244,6 +285,13 @@ export class Networking extends EventEmitter {
         this.state.host = undefined;
     }
 
+    /**
+     * This method will generate a random source port.
+     */
+    private generatePort(): number {
+        return Math.floor(Math.random() * PORT_RANGE) + STARTING_PORT;
+    }
+
       /////////////////////////////////////////
      ///      SOCKET MESSAGE HANDLERS      ///
     /////////////////////////////////////////
@@ -251,7 +299,7 @@ export class Networking extends EventEmitter {
     /**
      * This methods handles any and all incoming signaling messages.
      * If necessary, it will emit events according to the message.
-     * 
+     *
      * @param data The message data.
      */
     private handleSignalingMessage(data: string) {
@@ -342,7 +390,7 @@ export class Networking extends EventEmitter {
             else if (deserialized.type == "disconnected") {
                 this.state.host = true;
                 this.terminateConnection();
-                
+
                 this.emit("stateChange", {
                     newState: "disconnected",
                     me: false
@@ -368,7 +416,7 @@ export class Networking extends EventEmitter {
             // If we have attempted joining a meeting, and we got a join error, invalidate the local meeting state.
             if ((deserialized.reason?.search("meeting ID") != -1 || deserialized.reason?.search("password") != -1)
                 && this.state.joinAttempted) {
-                
+
                 this.state.joinAttempted = false;
                 this.invalidateMeetingState();
             }
@@ -377,60 +425,118 @@ export class Networking extends EventEmitter {
 
     /**
      * This method handles any and all incoming ICE messages.
-     * 
+     *
      * @param data The message data.
      * @returns If connection details were tested and approved.
      */
-    private handleICEMessage(data: string): boolean {
-        if (data == "HEARTBEAT") {
-            this.sockets.ice?.write("HEARTBEAT");
-            return false; // No need for further action.
-        }
-
-        // Handle user message
-        if (data[0] == "C") {
-            data = data.substring(1);
-
-
-        // Handle server response
-        } else {
-            let deserialized: ServerResponse = JSON.parse(data);
-
-            if (deserialized.response == "success") {
-                if (deserialized.type == "connected") {
-                    return false;
-                }
-
-                else if (deserialized.type == "disconnected") {
-                    
-                }
+    private handleICEMessage(data: string): Promise<boolean> {
+        return new Promise<boolean>((resolve, reject) => {
+            if (data == "HEARTBEAT") {
+                this.sockets.ice?.write("HEARTBEAT");
+                resolve(false); // No need for further action.
             }
 
-            else if (deserialized.response == "info") {
-                if (deserialized.type == "connected") {
+            // Handle user message
+            if (data[0] == "C") {
+                data = data.substring(1);
+
+                if (data[0] == "A") {
+                    if (this.state.iceStep == "TURN" || this.state.iceStep == "PORT") {
+                        resolve(true);
+                    }
+
+                    data = data.substring(1);
+                }
+
+                // The other peer has rejected the previous message.
+                else if (data[0] == "R") {
+                    if (this.state.iceStep == "TURN" || this.state.iceStep == "IP") {
+                        reject("Client did not accept communication proposal.");
+                    }
+
+                    else if (this.state.iceStep == "PORT") {
+                        // Unimplemented
+                    }
+                }
+
+                // The other peer wants to use the TURN service.
+                else if (data[0] == "T") {
+                    this.state.remoteAddress = {
+                        ip: DEFAULT_IP,
+                        port: PORTS.TURN
+                    };
+
+                    this.sockets.ice?.write("A");
+                    resolve(true);
+                }
+
+                // The other peer has sent in an IP request.
+                if (data[0] == "I") {
+
+                    // If we already have a remote address, it's TURN's address.
                     if (this.state.remoteAddress) {
+                        this.state.iceStep = "TURN";
                         this.sockets.ice?.write("T");
                     } else {
+                        this.state.remoteAddress = {
+                            ip: data.substring(1),
+                            port: -1
+                        };
+
+                        // If the state is undefined, the other peer initiated the negotiation.
+                        if (this.state.iceStep == undefined) {
+                            this.state.iceStep = "IP";
+                            this.sockets.ice?.write("AI" + this.state.localAddress!.ip);
+
+                        // Otherwise, we initiated it, and it's safe to assume they already have our IP.
+                        } else {
+                            this.state.iceStep = "PORT";
+                            this.state.localAddress!.port = this.generatePort();
+                            this.sockets.ice?.write("AP" + this.state.localAddress!.port);
+                        }
+                    }
+                }
+
+                else if (data[0] == "P") {
+                    this.state.remoteAddress!.port = parseInt(data.substring(1));
+
+                    // If the state is IP, the other has already received our port.
+                    if (this.state.iceStep == "PORT") {
+                        this.sockets.ice?.write("A");
+                        resolve(true);
+
+                    // Otherwise, we need to send our port as-well.
+                    } else {
+                        do {
+                            this.state.localAddress!.port = parseInt(data.substring(1));
+                        } while (this.state.localAddress!.port != this.state.remoteAddress!.port);
+
+                        this.state.iceStep = "PORT";
+                        this.sockets.ice?.write("AP" + this.state.localAddress!.port);
+                    }
+                }
+
+            // Handle server response
+            } else {
+                let deserialized: ServerResponse = JSON.parse(data);
+
+                if (deserialized.response == "info" && deserialized.type == "connected") {
+                    if (this.state.remoteAddress) {
+                        this.state.iceStep = "TURN";
+                        this.sockets.ice?.write("T");
+                    } else {
+                        this.state.iceStep = "IP";
                         this.sockets.ice?.write("I" + this.state.localAddress!.ip);
                     }
                 }
 
-                else if (deserialized.type == "disconnected") {
-
+                else if (deserialized.response == "error") {
+                    reject("An ICE error occurred");
                 }
             }
 
-            else if (deserialized.response == "error") {
-                this.state.remoteAddress = {
-                    ip: DEFAULT_IP,
-                    port: 3479
-                };
-
-                return true;
-            }
-        }
-
-        return false;
+            resolve(false);
+        });
     }
 
       /////////////////////////////////////////
@@ -456,7 +562,7 @@ export class Networking extends EventEmitter {
     /**
      * This method will attempt to join a meeting.
      * Upon improper usage, exceptions will be thrown.
-     * 
+     *
      * @param id The meeting ID.
      * @param password The meeting password.
      */
@@ -468,7 +574,7 @@ export class Networking extends EventEmitter {
         if (this.sockets.signaling == undefined) {
             this.makeSignalingSocket();
         }
-        
+
         this.state.id = id;
         this.state.password = password;
         this.state.joinAttempted = true;
@@ -515,9 +621,9 @@ export class Networking extends EventEmitter {
     /**
      * This method will send a message to the user's peer.
      * You may call this method after a "ready" event has been emitted.
-     * 
+     *
      * Upon improper usage, exceptions will be thrown.
-     * 
+     *
      * @param message The message to send.
      */
     public send(data: string): void {
@@ -544,12 +650,13 @@ type NetworkingState = {
     id?: string;
     password?: string;
     host?: boolean;
-    
+
     connected: boolean;
     joinAttempted: boolean;
 
     // ICE State
     attempts: number;
+    iceStep?: ICEState;
     localAddress?: Address;
     remoteAddress?: Address;
 };
@@ -580,3 +687,4 @@ type Address = {
 
 type ResponseStatus = "success" | "info" | "error";
 type ResponseType = "created" | "connected" | "switched" | "disconnected" | "ended";
+type ICEState = "IP" | "PORT" | "TURN";
