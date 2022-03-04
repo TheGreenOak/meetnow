@@ -461,8 +461,6 @@ export class Networking extends EventEmitter {
                 resolve(false); // No need for further action.
             }
 
-            console.log("ICE: " + data);
-
             // Handle user message
             if (data[0] == "C") {
                 data = data.substring(1);
@@ -558,7 +556,6 @@ export class Networking extends EventEmitter {
                     } else {
                         this.state.iceStep = "IP";
                         this.sockets.ice?.write("I" + this.state.localAddress!.ip);
-                        console.log("I" + this.state.localAddress!.ip);
                     }
                 }
 

@@ -23,6 +23,18 @@
 	net.on("error", (data: string) => {
 		showError(data, 3000);
 	});
+
+	net.on("ready", () => {
+		console.log("The connection has been successfully created!");
+	});
+
+	net.on("comm-error", (err) => {
+		console.error(err);
+	});
+
+	net.on("message", (data) => {
+		console.log("PEER: " + data);
+	});
 	
 	let webcamOn: boolean = false;
 	let micOn: boolean = false;
