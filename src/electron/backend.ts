@@ -200,7 +200,7 @@ export class Networking extends EventEmitter {
             this.sockets.communication = undefined;
 
             this.state.remoteAddress = undefined;
-            this.state.localAddress!.port = -1;
+            if (this.state.localAddress) this.state.localAddress.port = -1;
         }
     }
 
