@@ -10,6 +10,7 @@ import traceback
 import ast
 
 
+RECV_SIZE = 1024
 SERVER_PORT = 3479 # The TURN port except for the last number  - https://www.3cx.com/blog/voip-howto/stun-voip-1/
 MINUTE = 60
 USER_TTL_MESSAGES = 2
@@ -290,7 +291,7 @@ class Turn(UDPServer):
             while True:
                 try:
                     # In UDP, there are no sockets. Therefore, we just need to receive data.
-                    data, address = self.recv()
+                    data, address = self.recv(RECV_SIZE)
                     data = data.decode()
 
                     try:
