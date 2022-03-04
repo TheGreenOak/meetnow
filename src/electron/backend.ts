@@ -27,6 +27,16 @@ establishConnection() ; emits event "ready", or "fail"
     -> Tests connection | testConnection(): Promise<void> ; error means failed test
     -> 3 tests allowed before falling back to TURN
   -> Creates communication socket
+
+------------------------
+
+ICE Protocol:
+I [ip]
+P [port]
+T (TURN)
+A (accepted)
+R (rejected)
+
 */
 
 /**
@@ -83,8 +93,9 @@ export class Networking extends EventEmitter {
      * 
      * @param addr The address of the remote
      */
-    private makeCommunicationSocket(addr: Address) {
+    private makeCommunicationSocket(addr: Address, sourcePort?: number) {
         this.sockets.communication = createUDPSocket("udp4");
+        if (sourcePort) this.sockets.communication.bind(sourcePort);
         this.sockets.communication.connect(addr.port, addr.ip);
 
         this.sockets.communication.on("message", (data) => { this.emit("message", data); });
@@ -114,18 +125,20 @@ export class Networking extends EventEmitter {
                 this.state.localAddress = { ip: ip, port: -1 };  
             })
 
-            .catch((err) => {
-                this.makeCommunicationSocket({ip: DEFAULT_IP, port: 3479});
-                return;
+            .catch(() => {
+                this.state.remoteAddress = {
+                    ip: DEFAULT_IP,
+                    port: 3479
+                };
             });
         }
 
         // Step 2. Negotitate connection via ICE
         this.negotiateConnection().then((remoteAddress) => {
-            this.makeCommunicationSocket(remoteAddress); // Step 3. Create the socket
+            this.makeCommunicationSocket(remoteAddress, this.state.localAddress?.port); // Step 3. Create the socket
         })
 
-        .catch((err) => {
+        .catch(() => {
             this.emit("comm-error", "There was an error with the UDP communication socket.");
         });
     }
@@ -142,11 +155,13 @@ export class Networking extends EventEmitter {
 
             stunSocket.once("message", (data) => {
                 stunSocket.removeAllListeners();
+                stunSocket.close();
                 resolve(data.toString());
             });
 
             stunSocket.once("error", () => {
                 stunSocket.removeAllListeners();
+                stunSocket.close();
                 reject("Unable to get your IP address.");
             });
 
@@ -156,7 +171,13 @@ export class Networking extends EventEmitter {
         });
     }
 
-    private negotiateConnection() {
+    /**
+     * This methods attempt to negotiate a connection with the other peer.
+     * Upon success, it will return an address.
+     * 
+     * @returns A promise, which resolves to an IP and port
+     */
+    private negotiateConnection(): Promise<Address> {
         return new Promise<Address>((resolve, reject) => {
             this.sockets.ice = new TCPSocket();
             this.sockets.ice.connect(1673, DEFAULT_IP);
@@ -164,14 +185,26 @@ export class Networking extends EventEmitter {
             this.sockets.ice.on("data", (data) => {
                 if (this.handleICEMessage(data.toString())) {
                     this.sockets.ice?.removeAllListeners();
-                    
+                    this.sockets.ice?.destroy();
+                    this.sockets.ice = undefined;
+
+                    resolve(this.state.remoteAddress!);
                 }
             });
 
-            this.sockets.ice.on("error", () => {
+            this.sockets.ice.once("error", () => {
                 this.sockets.ice?.removeAllListeners();
+                this.sockets.ice?.destroy();
+                this.sockets.ice = undefined;
+
                 reject("Unable to negotiate a connection with remote peer.");
             });
+
+            this.sockets.ice.write(JSON.stringify({
+                request: "connect",
+                id: this.state.id,
+                password: this.state.password
+            }));
         });
     }
 
@@ -356,6 +389,8 @@ export class Networking extends EventEmitter {
 
         // Handle user message
         if (data[0] == "C") {
+            data = data.substring(1);
+
 
         // Handle server response
         } else {
@@ -363,17 +398,21 @@ export class Networking extends EventEmitter {
 
             if (deserialized.response == "success") {
                 if (deserialized.type == "connected") {
-                    
+                    return false;
                 }
 
                 else if (deserialized.type == "disconnected") {
-
+                    
                 }
             }
 
             else if (deserialized.response == "info") {
                 if (deserialized.type == "connected") {
-
+                    if (this.state.remoteAddress) {
+                        this.sockets.ice?.write("T");
+                    } else {
+                        this.sockets.ice?.write("I" + this.state.localAddress!.ip);
+                    }
                 }
 
                 else if (deserialized.type == "disconnected") {
@@ -382,7 +421,12 @@ export class Networking extends EventEmitter {
             }
 
             else if (deserialized.response == "error") {
+                this.state.remoteAddress = {
+                    ip: DEFAULT_IP,
+                    port: 3479
+                };
 
+                return true;
             }
         }
 
