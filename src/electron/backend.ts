@@ -119,8 +119,12 @@ export class Networking extends EventEmitter {
                 this.sockets.communication?.send("HEARTBEAT");
             }
 
-            if (msg[0] == "C") {
-                this.emit("message", msg.substring(1));
+            if (this.state.remoteAddress!.ip == DEFAULT_IP) {
+                if (msg[0] == "C") {
+                    this.emit("message", msg.substring(1));
+                }
+            } else {
+                this.emit("message", msg);
             }
         });
 
