@@ -189,17 +189,15 @@ export class Networking extends EventEmitter {
      * Note, after calling this, you will no longer be able to communicate with the other user.
      */
     private async terminateConnection() {
-        if (this.sockets.communication == undefined) {
-            throw new Error();
+        if (this.sockets.communication != undefined) {
+            this.sockets.communication.send("F");
+            this.sockets.communication.removeAllListeners();
+            this.sockets.communication.close();
+            this.sockets.communication = undefined;
+
+            this.state.remoteAddress = undefined;
+            this.state.localAddress!.port = -1;
         }
-
-        this.sockets.communication.send("F");
-        this.sockets.communication.removeAllListeners();
-        this.sockets.communication.close();
-        this.sockets.communication = undefined;
-
-        this.state.remoteAddress = undefined;
-        this.state.localAddress!.port = -1;
     }
 
       /////////////////////////////////////////
