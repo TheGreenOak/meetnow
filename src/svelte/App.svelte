@@ -23,22 +23,23 @@
 	net.on("error", (data: string) => {
 		showError(data, 3000);
 	});
+
 	
 	let webcamOn: boolean = false;
 	let micOn: boolean = false;
-
+	
 	let cam: Webcam = null;
 	let mic: Microphone = null;
-
+	
 	let error: boolean = false;
 	let errContent: string = "";
-
+	
 	let host: boolean = false;
 	let isHost: boolean = false;
-
+	
 	let message: boolean = false;
 	let msgContent: string = "";
-
+	
 	function toggleWebcam() {
 		webcamOn = webcamOn ? false : true;
 		if(!webcamOn) {
@@ -79,17 +80,21 @@
 			host = false;
 		}, timeout);
 	}
-
 </script>
 
 <main>
+	
 	{#if webcamOn}
 		<Webcam bind:this={cam} height={720} width={1280}/>
 	{:else}
 		<h1>Webcam turned off</h1>
 	{/if}
 
-	<button class={webcamOn ? "webcam-on" : ""} on:click={toggleWebcam}>[{webcamOn ? "(c)ON" : "(c)OFF"}]</button>
+	<button class={webcamOn ? "webcam-on" : "webcam-off"} on:click={toggleWebcam}>
+		<img src="assets/cam_{webcamOn ? "on" : "off"}.png" alt="cam"
+		width = "76"
+		class = "centerbutton">
+	</button>
 
 	{#if micOn}
 		<Microphone bind:this={mic}/>
@@ -97,7 +102,11 @@
 		<h1>Microphone turned off</h1>
 	{/if}
 	
-	<button class={micOn ? "microphone-on" : "microphone-off"} on:click={toggleMicrophone}>[{micOn ? "(m)ON" : "(m)OFF"}]</button>
+	<button class={micOn ? "microphone-on" : "microphone-off"} on:click={toggleMicrophone}>
+		<img src="assets/mic_{micOn ? "on" : "off"}.png" alt="mic"
+		width = "76"
+		class = "centerbutton">
+	</button>
 
 	{#if message}
 		<div class="message">{msgContent}</div>
@@ -113,6 +122,9 @@
 </main>
 
 <style>
+	:global(body) {
+		background-color: rgb(26 28 29);;
+	}
 	.message {
 		color: white;
 		background-color: blue;
@@ -135,8 +147,15 @@
 		background-color: red;
 	}
 
+	.centerbutton{
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+	}
+
 	button {
-		color: white;
+		color: rgb(77, 77, 77);
 		background-color: rgb(77, 77, 77);
 		border-radius: 50%;
 		height: 70px;
@@ -147,6 +166,7 @@
 		position: absolute;
 		bottom: 1px;
 		left: 1px;
+		
 	}
 
 	button:hover {
@@ -154,27 +174,38 @@
 	}
 
 	button.webcam-on {
-		color: rgb(19, 19, 19);
-		background-color:rgb(219, 219, 219);
+		background-color:rgb(77, 77, 77);
+	}
+
+	button.webcam-off {
+		background-color: rgb(234, 67, 53);
+		
+	}
+	
+	button.webcam-off:hover{
+		background-color: rgb(224,80,67);
 	}
 
 	button.webcam-on:hover {
-		color: black;
-		background-color: rgb(230, 230, 230);
+		background-color: rgb(59, 58, 58);
 	}
 
 	button.microphone-on {
 		color: rgb(19, 19, 19);
-		background-color:rgb(219, 219, 219);
+		background-color:rgb(77, 77, 77);
 		left: 100px;
 	}
 
 	button.microphone-off {
+		background-color: rgb(234, 67, 53);
 		left: 100px;
 	}
 
+	button.microphone-off:hover{
+		background-color: rgb(224,80,67);
+	}
+
 	button.microphone-on:hover {
-		color: black;
-		background-color: rgb(230, 230, 230);
+		background-color: rgb(59, 58, 58);
 	}
 </style>
