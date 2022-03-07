@@ -93,11 +93,24 @@ export class Networking extends EventEmitter {
 
         this.sockets.signaling.on("data", (data) => this.handleSignalingMessage(data.toString()));
         this.sockets.signaling.on("error", () => {
+            this.sockets.signaling?.removeAllListeners();
             this.sockets.signaling?.destroy();
             this.sockets.signaling = undefined;
             this.emit("error", "Could not connect to signaling server.");
         });
 
+        this.sockets.signaling.on("timeout", () => {
+            this.sockets.signaling?.removeAllListeners();
+            this.sockets.signaling?.destroy();
+            this.sockets.signaling = undefined;
+            this.emit("error", "Could not connect to signaling server.");
+        });
+
+        this.sockets.signaling.on("connect", () => {
+            this.sockets.signaling?.setTimeout(0);
+        });
+
+        this.sockets.signaling.setTimeout(3000);
         this.sockets.signaling.connect(PORTS.SIGNALING, DEFAULT_IP);
     }
 
@@ -238,6 +251,16 @@ export class Networking extends EventEmitter {
                 reject("Unable to negotiate a connection with remote peer.");
             });
 
+            this.sockets.ice.once("timeout", () => {
+                this.terminateICE();
+                reject("Unable to connect to the ICE server.");
+            });
+
+            this.sockets.ice.on("connect", () => {
+                this.sockets.ice?.setTimeout(0);
+            });
+
+            this.sockets.ice.setTimeout(3000);
             this.sockets.ice.write(JSON.stringify({
                 request: "connect",
                 id: this.state.id,
@@ -340,8 +363,8 @@ export class Networking extends EventEmitter {
         // Handle server response to requests
         if (deserialized.response == "success") {
             if (deserialized.type == "created") {
-                this.emit("stateChange", {
-                    newState: "started",
+                this.emit("state-change", {
+                    newState: "created",
                     me: true,
                     id: deserialized.id,
                     password: deserialized.password
@@ -357,7 +380,7 @@ export class Networking extends EventEmitter {
                 this.state.host = deserialized.waiting;
                 this.state.joinAttempted = false;
 
-                this.emit("stateChange", {
+                this.emit("state-change", {
                     newState: "connected",
                     me: true,
                     host: deserialized.waiting
@@ -377,7 +400,7 @@ export class Networking extends EventEmitter {
                 this.sockets.signaling?.destroy();
                 this.sockets.signaling = undefined;
 
-                this.emit("stateChange", {
+                this.emit("state-change", {
                     newState: "disconnected",
                     me: true
                 });
@@ -391,7 +414,7 @@ export class Networking extends EventEmitter {
                 this.sockets.signaling?.destroy();
                 this.sockets.signaling = undefined;
 
-                this.emit("stateChange", {
+                this.emit("state-change", {
                     newState: "ended",
                     me: true
                 });
@@ -418,7 +441,7 @@ export class Networking extends EventEmitter {
                 this.state.host = true;
                 this.terminateConnection();
 
-                this.emit("stateChange", {
+                this.emit("state-change", {
                     newState: "disconnected",
                     me: false
                 });
@@ -429,7 +452,7 @@ export class Networking extends EventEmitter {
                 this.invalidateMeetingState();
                 this.terminateConnection();
 
-                this.emit("stateChange", {
+                this.emit("state-change", {
                     newState: "ended",
                     me: false
                 });
