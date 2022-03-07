@@ -5,6 +5,7 @@ import { EventEmitter } from "events";
 const DEFAULT_IP = "meetnow.yeho.dev";
 const STARTING_PORT = 34200;
 const PORT_RANGE = 99;
+const MAX_ATTEMPTS = 3;
 
 const PORTS = {
     SIGNALING: 5060,
@@ -105,6 +106,7 @@ export class Networking extends EventEmitter {
      * This methods will make a new communication socket, and bind all event listeners to it.
      *
      * @param addr The address of the remote
+     * @param sourcePort This client's port
      */
     private makeCommunicationSocket(addr: Address, sourcePort?: number) {
         this.sockets.communication = createUDPSocket("udp4");
@@ -191,16 +193,20 @@ export class Networking extends EventEmitter {
     /**
      * This method will terminate the P2P/TURN connection that has been established.
      * Note, after calling this, you will no longer be able to communicate with the other user.
+     *
+     * @param clear Whether or not to delete the remoteAddress and source port
      */
-    private async terminateConnection() {
+    private async terminateConnection(clear?: boolean) {
         if (this.sockets.communication != undefined) {
             this.sockets.communication.send("F");
             this.sockets.communication.removeAllListeners();
             this.sockets.communication.close();
             this.sockets.communication = undefined;
 
-            this.state.remoteAddress = undefined;
-            if (this.state.localAddress) this.state.localAddress.port = -1;
+            if (clear) {
+                this.state.remoteAddress = undefined;
+                if (this.state.localAddress) this.state.localAddress.port = -1;
+            }
         }
     }
 
@@ -286,10 +292,48 @@ export class Networking extends EventEmitter {
      *
      * If the promise resolved, the connection succeded. Otherwise, it failed upon being rejected.
      */
-    private testConnection(): Promise<void> {
+    private testConnection(addr: Address, sourcePort: number): Promise<void> {
         return new Promise<void>((resolve, reject) => {
-            // Unimplemented
+            this.sockets.communication = createUDPSocket("udp4");
+            this.sockets.communication.bind(sourcePort);
+            this.sockets.communication.connect(addr.port, addr.ip);
+
+            const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+            this.sockets.communication.once("message", () => {
+                this.terminateConnection(false);
+                resolve();
+            });
+
+            this.sockets.communication.once("error", () => {
+                this.terminateConnection(false);
+                reject();
+            });
+
+            this.sockets.communication.once("connect", async () => {
+                for (let i = 0; i < MAX_ATTEMPTS; i++) {
+                    this.sockets.communication?.send("TEST");
+                    await sleep(700);
+                }
+
+                this.terminateConnection(false);
+                reject();
+            });
         });
+    }
+
+    private retryNegotiation() {
+        this.state.attempts++;
+
+        if (this.state.host) {
+            if (this.state.attempts >= MAX_ATTEMPTS) {
+                this.state.iceStep = "TURN";
+                this.sockets.ice?.write("T");
+            } else {
+                this.state.localAddress!.port = this.generatePort();
+                this.sockets.ice?.write("RP" + this.state.localAddress!.port);
+            }
+        }
     }
 
       /////////////////////////////////////////
@@ -458,6 +502,8 @@ export class Networking extends EventEmitter {
      */
     private handleICEMessage(data: string): Promise<boolean> {
         return new Promise<boolean>((resolve, reject) => {
+            let test: boolean = false;
+
             if (data == "HEARTBEAT") {
                 this.sockets.ice?.write("HEARTBEAT");
                 resolve(false); // No need for further action.
@@ -468,8 +514,19 @@ export class Networking extends EventEmitter {
                 data = data.substring(1);
 
                 if (data[0] == "A") {
-                    if (this.state.iceStep == "TURN" || this.state.iceStep == "PORT") {
+                    if (this.state.iceStep == "TURN") {
                         resolve(true);
+                    }
+
+                    else if (this.state.iceStep == "PORT") {
+                        test = true;
+                        this.testConnection(this.state.remoteAddress!, this.state.localAddress!.port).then(() => {
+                            resolve(true);
+                        })
+
+                        .catch(() => {
+                            this.retryNegotiation();
+                        });
                     }
 
                     data = data.substring(1);
@@ -482,8 +539,11 @@ export class Networking extends EventEmitter {
                     }
 
                     else if (this.state.iceStep == "PORT") {
-                        // Unimplemented
+                        this.state.localAddress!.port = this.generatePort();
+                        this.sockets.ice?.write("AP" + this.state.localAddress!.port);
                     }
+
+                    data = data.substring(1);
                 }
 
                 // The other peer wants to use the TURN service.
@@ -529,8 +589,13 @@ export class Networking extends EventEmitter {
 
                     // If the state is IP, the other has already received our port.
                     if (this.state.iceStep == "PORT") {
-                        this.sockets.ice?.write("A");
-                        resolve(true);
+                        this.testConnection(this.state.remoteAddress!, this.state.localAddress!.port).then(() => {
+                            resolve(true);
+                        })
+
+                        .catch(() => {
+                            this.retryNegotiation();
+                        });
 
                     // Otherwise, we need to send our port as-well.
                     } else {
@@ -543,7 +608,7 @@ export class Networking extends EventEmitter {
                     }
                 }
 
-                else {
+                else if (test == false) {
                     reject("Client sent an invalid message");
                 }
 
@@ -566,7 +631,7 @@ export class Networking extends EventEmitter {
                 }
             }
 
-            return false;
+            resolve(false);
         });
     }
 
