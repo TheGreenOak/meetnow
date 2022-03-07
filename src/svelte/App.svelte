@@ -7,35 +7,6 @@
 	// This is usually dangerous, however, we know window does have the networking attribute from Electron's preload.
 	const net: Networking = (window as any).networking;
 	
-	net.on("stateChange", (data: SignalingState) => {
-		console.log(data);
-		showMessage(data.newState, 3000);
-	});
-
-	net.on("hostChange", (data: boolean) => { 
-		if (data == true) {
-			showHost(true, 2000);
-		} else {
-			showHost(false, 2000);
-		}
-	});
-
-	net.on("error", (data: string) => {
-		showError(data, 3000);
-	});
-
-	net.on("ready", () => {
-		console.log("The connection has been successfully created!");
-	});
-
-	net.on("comm-error", (err) => {
-		console.error(err);
-	});
-
-	net.on("message", (data) => {
-		console.log("PEER: " + data);
-	});
-	
 	let webcamOn: boolean = false;
 	let micOn: boolean = false;
 	
@@ -45,11 +16,11 @@
 	let error: boolean = false;
 	let errContent: string = "";
 	
-	let host: boolean = false;
-	let isHost: boolean = false;
-	
 	let message: boolean = false;
 	let msgContent: string = "";
+
+	let success: boolean = false;
+	let successContent: string = "";
 	
 	function toggleWebcam() {
 		webcamOn = webcamOn ? false : true;
@@ -65,35 +36,111 @@
 		}
 	}
 
-	function showMessage(content: string, timeout: number) {
-		message = true;
-		msgContent = content;
+	/*
+	For meeting buttons n' stuff
+	*/
 
-		setTimeout(() => {
-			message = false;
-		}, timeout);
-	}
+	let id: string | undefined;
+	let password: string | undefined;
+	let hide: string = "";
+	let ready: string = "";
+	let peerMsg: string;
 
-	function showError(content: string, timeout: number) {
+	net.on("state-change", (state: SignalingState) => {
+		if (state.newState == "created") {
+			id = state.id;
+			password = state.password;
+
+			net.join(state.id, state.password);
+		}
+
+		else if (state.newState == "connected" && state.me) {
+			showMessage("Connected!");
+			console.log("ID: " + id);
+			console.log("Password: " + password);
+			hide = "hide";
+		}
+
+		else if (state.newState == "connected" && state.me) {
+			showMessage("A peer has connected!");
+		}
+
+		else if (state.newState == "disconnected" && state.me) {
+			hide = "";
+			ready = "";
+		}
+	});
+
+	net.on("ready", () => {
+		ready = "ready";
+	});
+
+	net.on("error", (err) => {
+		showError(err);
+	});
+
+	net.on("message", (content) => { showSuccess(content); });
+
+	function showError(err: string) {
 		error = true;
-		errContent = content;
+		errContent = err;
 
 		setTimeout(() => {
 			error = false;
-		}, timeout);
+		}, 1000);
 	}
 
-	function showHost(state: boolean, timeout: number) {
-		host = true;
-		isHost = state;
+	function showMessage(msg: string) {
+		message = true;
+		msgContent = msg;
 
 		setTimeout(() => {
-			host = false;
-		}, timeout);
+			message = false;
+		}, 1500);
+	}
+
+	function showSuccess(msg: string) {
+		success = true;
+		successContent = msg;
+
+		setTimeout(() => {
+			success = false;
+		}, 1500);
+	}
+
+	function startMeeting() {
+		net.start();
+	}
+
+	function joinMeeting(e: Event) {
+		e.preventDefault();
+		net.join(id, password);
+	}
+
+	function leaveMeeting() {
+		net.leave();
+	}
+
+	function sendMessage(e: Event) {
+		e.preventDefault();
+		net.send(peerMsg);
 	}
 </script>
 
 <main>
+	<!-- Starting Buttons -->
+	<button id="start-btn" class="pre-meeting {hide}" on:click={startMeeting}>Start Meeting</button>
+	<form id="meeting-form" class="pre-meeting {hide}" on:submit={joinMeeting}>
+		<input type="text" id="meeting-id" name="meeting-id" placeholder="ID" bind:value={id} />
+		<input type="password" id="meeting-password" name="meeting-password" placeholder="Password" bind:value={password} />
+		<input type="submit" value="Join" />
+	</form>
+
+	<button id="leave-btn" class="pre-meeting {hide ? "" : "hide"}" on:click={leaveMeeting}>Leave Meeting</button>
+	<form id="send-msg" class={ready} on:submit={sendMessage}>
+		<input type="text" placeholder="Enter your message..." bind:value={peerMsg} />
+		<input type="submit" value="Send" />
+	</form>
 	
 	{#if webcamOn}
 		<Webcam bind:this={cam} height={720} width={1280}/>
@@ -101,7 +148,7 @@
 		<h1>Webcam turned off</h1>
 	{/if}
 
-	<button class={webcamOn ? "webcam-on" : "webcam-off"} on:click={toggleWebcam}>
+	<button class="btn {webcamOn ? "webcam-on" : "webcam-off"}" on:click={toggleWebcam}>
 		<img src="assets/cam_{webcamOn ? "on" : "off"}.png" alt="cam"
 		width = "76"
 		class = "centerbutton">
@@ -113,7 +160,7 @@
 		<h1>Microphone turned off</h1>
 	{/if}
 	
-	<button class={micOn ? "microphone-on" : "microphone-off"} on:click={toggleMicrophone}>
+	<button class="btn {micOn ? "microphone-on" : "microphone-off"}" on:click={toggleMicrophone}>
 		<img src="assets/mic_{micOn ? "on" : "off"}.png" alt="mic"
 		width = "76"
 		class = "centerbutton">
@@ -127,15 +174,33 @@
 		<div class="message error">{errContent}</div>
 	{/if}
 
-	{#if host}
-		<div class="message success">You're {isHost ? "now" : "no longer"} the host.</div>
+	{#if success}
+		<div class="message success">{successContent}</div>
 	{/if}
 </main>
 
 <style>
+	button.pre-meeting {
+		background-color: aqua;
+		font-size: 16px;
+	}
+
+	.hide {
+		display: none;
+	}
+
+	#send-msg {
+		display: none;
+	}
+
+	#send-msg.ready {
+		display: block;
+	}
+
 	:global(body) {
 		background-color: rgb(26 28 29);;
 	}
+
 	.message {
 		color: white;
 		background-color: blue;
@@ -165,7 +230,7 @@
 		transform: translate(-50%, -50%);
 	}
 
-	button {
+	.btn {
 		color: rgb(77, 77, 77);
 		background-color: rgb(77, 77, 77);
 		border-radius: 50%;
@@ -180,43 +245,43 @@
 		
 	}
 
-	button:hover {
+	.btn:hover {
 		background-color: rgb(126, 126, 126);
 	}
 
-	button.webcam-on {
+	.btn.webcam-on {
 		background-color:rgb(77, 77, 77);
 	}
 
-	button.webcam-off {
+	.btn.webcam-off {
 		background-color: rgb(234, 67, 53);
 		
 	}
 	
-	button.webcam-off:hover{
+	.btn.webcam-off:hover{
 		background-color: rgb(224,80,67);
 	}
 
-	button.webcam-on:hover {
+	.btn.webcam-on:hover {
 		background-color: rgb(59, 58, 58);
 	}
 
-	button.microphone-on {
+	.btn.microphone-on {
 		color: rgb(19, 19, 19);
 		background-color:rgb(77, 77, 77);
 		left: 100px;
 	}
 
-	button.microphone-off {
+	.btn.microphone-off {
 		background-color: rgb(234, 67, 53);
 		left: 100px;
 	}
 
-	button.microphone-off:hover{
+	.btn.microphone-off:hover{
 		background-color: rgb(224,80,67);
 	}
 
-	button.microphone-on:hover {
+	.btn.microphone-on:hover {
 		background-color: rgb(59, 58, 58);
 	}
 </style>
