@@ -426,7 +426,7 @@ export class Networking extends EventEmitter {
             if (deserialized.type == "connected") {
                 this.establishConnection();
 
-                this.emit("newState", {
+                this.emit("state-change", {
                     newState: "connected",
                     me: false
                 });

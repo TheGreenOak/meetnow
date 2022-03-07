@@ -61,13 +61,18 @@
 			hide = "hide";
 		}
 
-		else if (state.newState == "connected" && state.me) {
+		else if (state.newState == "connected" && !state.me) {
 			showMessage("A peer has connected!");
 		}
 
 		else if (state.newState == "disconnected" && state.me) {
 			hide = "";
 			ready = "";
+		}
+
+		else if (state.newState == "disconnected" && !state.me) {
+			ready = "";
+			showMessage("Peer disconnected!");
 		}
 	});
 
@@ -79,7 +84,10 @@
 		showError(err);
 	});
 
-	net.on("message", (content) => { showSuccess(content); });
+	net.on("message", (content) => {
+		showSuccess(content);
+		console.log("PEER: " + content);
+	});
 
 	function showError(err: string) {
 		error = true;
@@ -124,6 +132,7 @@
 	function sendMessage(e: Event) {
 		e.preventDefault();
 		net.send(peerMsg);
+		peerMsg = "";
 	}
 </script>
 
