@@ -157,23 +157,25 @@
 		<h1>Webcam turned off</h1>
 	{/if}
 
-	<button class="btn {webcamOn ? "webcam-on" : "webcam-off"}" on:click={toggleWebcam}>
-		<img src="assets/cam_{webcamOn ? "on" : "off"}.png" alt="cam"
-		width = "76"
-		class = "centerbutton">
-	</button>
 
 	{#if micOn}
 		<Microphone bind:this={mic}/>
 	{:else}
 		<h1>Microphone turned off</h1>
 	{/if}
-	
-	<button class="btn {micOn ? "microphone-on" : "microphone-off"}" on:click={toggleMicrophone}>
-		<img src="assets/mic_{micOn ? "on" : "off"}.png" alt="mic"
-		width = "76"
-		class = "centerbutton">
-	</button>
+	<div class="horizontal-center">
+		<button class="{webcamOn ? "webcam-on" : "webcam-off"} btn" on:click={toggleWebcam}>
+			<img src="assets/cam_{webcamOn ? "on" : "off"}.png" alt="cam"
+			width = "76"
+			class = "centerbuttonimg">
+		</button>
+		<button class="{micOn ? "microphone-on" : "microphone-off"} btn" on:click={toggleMicrophone}>
+			<img src="assets/mic_{micOn ? "on" : "off"}.png" alt="mic"
+			width = "76"
+			class = "centerbuttonimg">
+		</button>
+	</div>
+
 
 	{#if message}
 		<div class="message">{msgContent}</div>
@@ -232,7 +234,14 @@
 		background-color: red;
 	}
 
-	.centerbutton{
+	.horizontal-center {
+	position: absolute;
+	top: 98%;
+	left: 43.5%;
+	transform: translate(-50%, -50%);
+	}
+
+	.centerbuttonimg{
 		position: absolute;
 		top: 50%;
 		left: 50%;
