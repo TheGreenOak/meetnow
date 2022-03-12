@@ -262,6 +262,18 @@
   resolved "https://registry.yarnpkg.com/@types/verror/-/verror-1.10.5.tgz#2a1413aded46e67a1fe2386800e291123ed75eb1"
   integrity sha512-9UjMCHK5GPgQRoNbqdLIAvAy0EInuiqbW0PBMtVP6B5B2HQJlvoJHM+KodPZMEjOa5VkSc+5LH7xy+cUzQdmHw==
 
+"@types/w3c-image-capture@^1.0.5":
+  version "1.0.5"
+  resolved "https://registry.yarnpkg.com/@types/w3c-image-capture/-/w3c-image-capture-1.0.5.tgz#d953701356c4bceacc23f9465a76d3eab864328e"
+  integrity sha512-MzkDgLz8bJLzxMlPJYoIQbuFdbYzydlr1DQ3jPcqEZhEWBACxsqvrUB99CegClXCxoTs2BDDdbuvAPOZ/zec1g==
+  dependencies:
+    "@types/webrtc" "*"
+
+"@types/webrtc@*":
+  version "0.0.31"
+  resolved "https://registry.yarnpkg.com/@types/webrtc/-/webrtc-0.0.31.tgz#164b8d6f40ff0238b3e62604e8d23f7377125284"
+  integrity sha512-GEoJIoM/ddxdaGnu0enJVDTdvwwr3/tPkpXz0LBTSi282gqxWDg1ffk4fzHU2dosNshp+Slq1kfGxpKs5083Nw==
+
 "@types/yargs-parser@*":
   version "20.2.1"
   resolved "https://registry.yarnpkg.com/@types/yargs-parser/-/yargs-parser-20.2.1.tgz#3b9ce2489919d9e4fea439b76916abc34b2df129"
@@ -2157,7 +2169,7 @@ signal-exit@^3.0.2:
   resolved "https://registry.yarnpkg.com/signal-exit/-/signal-exit-3.0.7.tgz#a9a1767f8af84155114eaabd73f99273c8f59ad9"
   integrity sha512-wnD2ZE+l+SPC/uoS0vXeE9L1+0wuaMqKlfz9AMUo38JsyLSBWSFcHR1Rri62LZc12vLr1gb3jl7iwQhgwpAbGQ==
 
-sirv-cli@^2.0.0:
+sirv-cli@^2.0.2:
   version "2.0.2"
   resolved "https://registry.yarnpkg.com/sirv-cli/-/sirv-cli-2.0.2.tgz#4b25ff8dc577be41588357c1f87fbf264a1bba55"
   integrity sha512-OtSJDwxsF1NWHc7ps3Sa0s+dPtP15iQNJzfKVz+MxkEo3z72mCD+yu30ct79rPr0CaV1HXSOBp+MIY5uIhHZ1A==

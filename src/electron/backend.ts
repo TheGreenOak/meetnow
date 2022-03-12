@@ -142,10 +142,10 @@ export class Networking extends EventEmitter {
         });
 
         // Handle socket errors
-        this.sockets.communication.on("error", () => {
+        this.sockets.communication.on("error", (err) => {
             this.sockets.communication?.close();
             this.sockets.communication = undefined;
-            this.emit("comm-error", "There was an error with the UDP communication socket.");
+            this.emit("comm-error", err);
         });
 
         // Send initial TURN message, and emit "ready"

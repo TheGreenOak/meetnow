@@ -1,38 +1,42 @@
 <script lang="ts">
 	import type { Networking, SignalingState } from "../electron/backend";
-	import Webcam from "./components/Webcam.svelte";
-	import Microphone from "./components/Microphone.svelte";
+	import Media from "./media";
 
 	// We cast window as any to avoid getting a TypeScript error.
 	// This is usually dangerous, however, we know window does have the networking attribute from Electron's preload.
 	const net: Networking = (window as any).networking;
+	const userMedia: Media = new Media();
 	
 	let webcamOn: boolean = false;
 	let micOn: boolean = false;
 	
-	let cam: Webcam = null;
-	let mic: Microphone = null;
-	
-	let error: boolean = false;
-	let errContent: string = "";
-	
-	let message: boolean = false;
-	let msgContent: string = "";
-
-	let success: boolean = false;
-	let successContent: string = "";
+	let cam: HTMLVideoElement;
+	let mic: HTMLAudioElement;
 	
 	function toggleWebcam() {
 		webcamOn = webcamOn ? false : true;
-		if(!webcamOn) {
-			cam.turnOff()
+
+		if (webcamOn) {
+			// 480p video
+			userMedia.enableVideo(848, 480).then(() => {
+				cam.srcObject = userMedia.getVideoStream();
+				cam.play();
+			});
+		} else {
+			userMedia.disableVideo();
 		}
 	}
 
 	function toggleMicrophone() {
 		micOn = micOn ? false : true;
-		if(!micOn) {
-			mic.turnOff();
+
+		if (micOn) {
+			userMedia.enableAudio(true).then(() => {
+				mic.srcObject = userMedia.getAudioStream();
+				mic.play();
+			});
+		} else {
+			userMedia.disableAudio();
 		}
 	}
 
@@ -43,7 +47,7 @@
 	let id: string | undefined;
 	let password: string | undefined;
 	let hide: string = "";
-	let ready: string = "";
+	let ready: string = "ready";
 	let peerMsg: string;
 
 	net.on("state-change", (state: SignalingState) => {
@@ -55,14 +59,14 @@
 		}
 
 		else if (state.newState == "connected" && state.me) {
-			showMessage("Connected!");
+			console.log("Connected!");
 			console.log("ID: " + id);
 			console.log("Password: " + password);
 			hide = "hide";
 		}
 
 		else if (state.newState == "connected" && !state.me) {
-			showMessage("A peer has connected!");
+			console.log("A peer has connected!");
 		}
 
 		else if (state.newState == "disconnected" && state.me) {
@@ -72,7 +76,7 @@
 
 		else if (state.newState == "disconnected" && !state.me) {
 			ready = "";
-			showMessage("Peer disconnected!");
+			console.log("Peer disconnected!");
 		}
 	});
 
@@ -80,41 +84,18 @@
 		ready = "ready";
 	});
 
+	net.on("comm-error", (err) => {
+		console.error("Unable to connect with peer B!");
+		console.error("ERR: " + err);
+	});
+
 	net.on("error", (err) => {
-		showError(err);
+		console.error(err);
 	});
 
 	net.on("message", (content) => {
-		showSuccess(content);
 		console.log("PEER: " + content);
 	});
-
-	function showError(err: string) {
-		error = true;
-		errContent = err;
-
-		setTimeout(() => {
-			error = false;
-		}, 1000);
-	}
-
-	function showMessage(msg: string) {
-		message = true;
-		msgContent = msg;
-
-		setTimeout(() => {
-			message = false;
-		}, 1500);
-	}
-
-	function showSuccess(msg: string) {
-		success = true;
-		successContent = msg;
-
-		setTimeout(() => {
-			success = false;
-		}, 1500);
-	}
 
 	function startMeeting() {
 		net.start();
@@ -129,11 +110,35 @@
 		net.leave();
 	}
 
-	function sendMessage(e: Event) {
-		e.preventDefault();
-		net.send(peerMsg);
-		peerMsg = "";
+	function sendFrame() {
+		if (webcamOn) {
+			userMedia.getVideoFrame().then(async (frame) => {
+				// how do i send it plz
+
+				/*
+				let j = 0;
+				for (let i = 0; i < frame.length; i += 10000) {
+					if (i + 10000 >= frame.length) {
+						net.send(frame.substring(i));
+					} else {
+						net.send(frame.substring(i, i + 10000));
+					}
+
+					await new Promise(r => setTimeout(r, 100));
+					j++;
+				}
+
+				console.log("ENDED!");
+				console.log("Num of transitions: " + (j + 1));
+				net.send("END");
+				*/
+			})
+
+			.catch(err => console.error(err));
+		}
 	}
+
+	let myCanvas: HTMLCanvasElement = null;
 </script>
 
 <main>
@@ -146,46 +151,28 @@
 	</form>
 
 	<button id="leave-btn" class="pre-meeting {hide ? "" : "hide"}" on:click={leaveMeeting}>Leave Meeting</button>
-	<form id="send-msg" class={ready} on:submit={sendMessage}>
-		<input type="text" placeholder="Enter your message..." bind:value={peerMsg} />
-		<input type="submit" value="Send" />
-	</form>
-	
-	{#if webcamOn}
-		<Webcam bind:this={cam} height={720} width={1280}/>
-	{:else}
-		<h1>Webcam turned off</h1>
+
+	{#if ready}
+		<button on:click={sendFrame}>Send frame</button>
 	{/if}
+	
+	<canvas bind:this={myCanvas}></canvas>
+
+	<!-- svelte-ignore a11y-media-has-caption -->
+	<video bind:this={cam} width="848" height="480" />
+	<audio bind:this={mic}/>
 
 	<button class="btn {webcamOn ? "webcam-on" : "webcam-off"}" on:click={toggleWebcam}>
 		<img src="assets/cam_{webcamOn ? "on" : "off"}.png" alt="cam"
 		width = "76"
 		class = "centerbutton">
 	</button>
-
-	{#if micOn}
-		<Microphone bind:this={mic}/>
-	{:else}
-		<h1>Microphone turned off</h1>
-	{/if}
 	
 	<button class="btn {micOn ? "microphone-on" : "microphone-off"}" on:click={toggleMicrophone}>
 		<img src="assets/mic_{micOn ? "on" : "off"}.png" alt="mic"
 		width = "76"
 		class = "centerbutton">
 	</button>
-
-	{#if message}
-		<div class="message">{msgContent}</div>
-	{/if}
-
-	{#if error}
-		<div class="message error">{errContent}</div>
-	{/if}
-
-	{#if success}
-		<div class="message success">{successContent}</div>
-	{/if}
 </main>
 
 <style>
@@ -196,14 +183,6 @@
 
 	.hide {
 		display: none;
-	}
-
-	#send-msg {
-		display: none;
-	}
-
-	#send-msg.ready {
-		display: block;
 	}
 
 	:global(body) {
