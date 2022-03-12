@@ -11,7 +11,7 @@ OUT_FILE    = build
 
 # JS Variables
 JS_COMPILER = emcc
-JS_FLAGS    = -s EXPORTED_FUNCTIONS=_encode,_decode -s EXPORTED_RUNTIME_METHODS=cwrap
+JS_FLAGS    = -s EXPORTED_FUNCTIONS=_encode,_decode -s EXPORTED_RUNTIME_METHODS=cwrap -O3
 JS_INCLUDES = -Iinclude
 JS_SOURCE   = src/codec.cpp
 JS_OUT_FILE = codec.js
