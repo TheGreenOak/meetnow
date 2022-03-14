@@ -56,6 +56,8 @@ export default class Media {
      */
     public async enableVideo(width: number, height: number, id?: string): Promise<void> {
         return new Promise<void>((resolve, reject) => {
+            if (this.videoStream) resolve();
+
             navigator.mediaDevices.getUserMedia({
                 video: {
                     deviceId: id,
@@ -81,6 +83,8 @@ export default class Media {
      */
     public async enableAudio(noiseSuppression: boolean, id?: string): Promise<void> {
         return new Promise<void>((resolve, reject) => {
+            if (this.audioStream) resolve();
+
             navigator.mediaDevices.getUserMedia({
                 audio: {
                     deviceId: id,
@@ -106,6 +110,8 @@ export default class Media {
      */
     public async enableScreenshare(width: number, height: number): Promise<void> {
         return new Promise<void>((resolve, reject) => {
+            if (this.screenStream) resolve();
+
             navigator.mediaDevices.getDisplayMedia({
                 video: {
                     width: { ideal: width },
@@ -118,7 +124,7 @@ export default class Media {
                 resolve();
             })
 
-            .catch(err => resolve(err));
+            .catch(err => reject(err));
         });
     }
 

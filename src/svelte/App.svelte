@@ -17,8 +17,8 @@
 		webcamOn = webcamOn ? false : true;
 
 		if (webcamOn) {
-			// 480p video
-			userMedia.enableVideo(848, 480).then(() => {
+			// 360p video
+			userMedia.enableVideo(640, 360).then(() => {
 				cam.srcObject = userMedia.getVideoStream();
 				cam.play();
 			});
