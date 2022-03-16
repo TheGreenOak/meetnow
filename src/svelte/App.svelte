@@ -189,28 +189,6 @@
 		background-color: rgb(26 28 29);;
 	}
 
-	.message {
-		color: white;
-		background-color: blue;
-		position: absolute;
-		top: 50%;
-		left: 50%;
-		transform: translate(-50%, -50%);
-		font-family: Arial;
-		font-weight: bold;
-		font-size: 26px;
-		border-radius: 10px;
-		padding: 10px;
-	}
-
-	.message.success {
-		background-color: green;
-	}
-
-	.message.error {
-		background-color: red;
-	}
-
 	.centerbutton{
 		position: absolute;
 		top: 50%;
