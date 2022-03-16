@@ -452,7 +452,7 @@ class Signaling(TCPServer):
                     try:
                         user["ttl"] = user["ttl"] - 1
                         user["socket"].send(b"HEARTBEAT")
-                    except BrokenPipeError: # User has disconnected abruptly.
+                    except (BrokenPipeError, ConnectionResetError): # User has disconnected abruptly.
                         if self.disconnect_client(user_uuid):
                             counter += 2
                         else:
@@ -501,8 +501,6 @@ class Signaling(TCPServer):
 
                 except (ConnectionError, OSError):
                     self.disconnect_client(address)
-            
-            
 
 
     def handle_message(self, addr, sock, message):
