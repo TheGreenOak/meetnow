@@ -178,7 +178,7 @@ export default class Media {
     }
 
     private bitmapToString(bitmap: ImageBitmap): string {
-        let tempCanvas: HTMLCanvasElement;
+        let tempCanvas: HTMLCanvasElement = document.createElement("canvas");
         let canvasCtx: CanvasRenderingContext2D = tempCanvas.getContext("2d");
 
         let rawData: Uint8ClampedArray;
@@ -190,7 +190,7 @@ export default class Media {
         canvasCtx.drawImage(bitmap, 0, 0);
         rawData = canvasCtx.getImageData(0, 0, bitmap.width, bitmap.height).data;
 
-		for (let i = 0; i < (bitmap.width * bitmap.height * 4); i += 4) {
+		for (let i = 0; i < rawData.length; i += 4) {
 			for (let j = 0; j < 3; j++) {
 				converted += String.fromCharCode(rawData[i + j]);
 			}

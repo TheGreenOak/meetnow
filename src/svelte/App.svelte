@@ -210,14 +210,16 @@
 	:global(body) {
 		background-color: rgb(26 28 29);;
 	}
-
-	.message {
-		color: white;
-		background-color: blue;
+	
+	canterbuttonimg{
 		position: absolute;
 		top: 50%;
 		left: 50%;
 		transform: translate(-50%, -50%);
+
+	.message {
+		color: white;
+		background-color: blue;
 		font-family: Arial;
 		font-weight: bold;
 		font-size: 26px;
