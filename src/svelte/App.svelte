@@ -39,6 +39,10 @@
 			userMedia.disableAudio();
 		}
 	}
+	
+	function reload() {
+		location.reload();
+	}
 
 	/*
 	For meeting buttons n' stuff
@@ -142,8 +146,15 @@
 </script>
 
 <main>
+	<!-- General Buttons-->
+	<button class="logo-button" on:click={reload}>
+		<img class="logo-img" src="assets/aperture.png" alt="logo" 
+		width = "50">
+	</button>
+
+
 	<!-- Starting Buttons -->
-	<button id="start-btn" class="pre-meeting {hide}" on:click={startMeeting}>Start Meeting</button>
+	<button id="start-btn" class="{hide}" on:click={startMeeting}>Start Meeting</button>
 	<form id="meeting-form" class="pre-meeting {hide}" on:submit={joinMeeting}>
 		<input type="text" id="meeting-id" name="meeting-id" placeholder="ID" bind:value={id} />
 		<input type="password" id="meeting-password" name="meeting-password" placeholder="Password" bind:value={password} />
@@ -162,20 +173,31 @@
 	<video bind:this={cam} width="848" height="480" />
 	<audio bind:this={mic}/>
 
-	<button class="btn {webcamOn ? "webcam-on" : "webcam-off"}" on:click={toggleWebcam}>
-		<img src="assets/cam_{webcamOn ? "on" : "off"}.png" alt="cam"
-		width = "76"
-		class = "centerbutton">
-	</button>
-	
-	<button class="btn {micOn ? "microphone-on" : "microphone-off"}" on:click={toggleMicrophone}>
-		<img src="assets/mic_{micOn ? "on" : "off"}.png" alt="mic"
-		width = "76"
-		class = "centerbutton">
-	</button>
+	<!-- Call Control Buttons -->
+	<div id="container">
+		<button id="cam-control" class="{webcamOn ? "webcam-on" : "webcam-off"} btn" on:click={toggleWebcam}>
+			<img src="assets/cam_{webcamOn ? "on" : "off"}.png" alt="cam"
+			width = "76"
+			class = "centerbuttonimg">
+		</button>
+		&nbsp;&nbsp;
+		<button id="mic-control" class="{micOn ? "microphone-on" : "microphone-off"} btn" on:click={toggleMicrophone}>
+			<img src="assets/mic_{micOn ? "on" : "off"}.png" alt="mic"
+			width = "76"
+			class = "centerbuttonimg">
+		</button>
+	</div>
 </main>
 
 <style>
+	/*meeting start end related styles*/
+
+	#start-btn {
+		position: absolute;
+		top: 50%;
+		left: 8%;
+	}
+
 	button.pre-meeting {
 		background-color: aqua;
 		font-size: 16px;
@@ -211,65 +233,82 @@
 		background-color: red;
 	}
 
-	.centerbutton{
-		position: absolute;
-		top: 50%;
-		left: 50%;
-		transform: translate(-50%, -50%);
+	/*general styles*/
+	
+	.logo-button {
+		background-color: transparent;
+		color: transparent;
+		border-radius: 50%;
+		border: none;
+		cursor: pointer;
+		width: 60px;
+		height: 60px;
+	}
+	
+	.logo-button:hover {
+		background-color: transparent;
+		color: white;
 	}
 
+	.logo-img {
+		-webkit-filter: invert(1);
+   		filter: invert(1);
+	}
+	
+	#container{
+		text-align: center;
+		position: fixed;
+		width: 100%;
+		bottom: 0;
+	}
+	
+	.centerbuttonimg{
+		position: relative;
+		right: 10.5px;
+		top: -10px;
+	}
+	
+	/*call control related styles*/
+
 	.btn {
-		color: rgb(77, 77, 77);
-		background-color: rgb(77, 77, 77);
-		border-radius: 50%;
 		height: 70px;
 		width: 70px;
+		border-radius: 50%;
 		cursor: pointer;
 		transition: color ease 0.5s;
 		transition: background-color ease 0.5s;
-		position: absolute;
-		bottom: 1px;
-		left: 1px;
-		
-	}
-
-	.btn:hover {
-		background-color: rgb(126, 126, 126);
 	}
 
 	.btn.webcam-on {
 		background-color:rgb(77, 77, 77);
 	}
 
-	.btn.webcam-off {
-		background-color: rgb(234, 67, 53);
-		
-	}
-	
-	.btn.webcam-off:hover{
-		background-color: rgb(224,80,67);
-	}
-
 	.btn.webcam-on:hover {
 		background-color: rgb(59, 58, 58);
 	}
 
-	.btn.microphone-on {
-		color: rgb(19, 19, 19);
-		background-color:rgb(77, 77, 77);
-		left: 100px;
-	}
-
-	.btn.microphone-off {
+	.btn.webcam-off {
 		background-color: rgb(234, 67, 53);
-		left: 100px;
+	}
+	
+	.btn.webcam-off:hover {
+		background-color: rgb(224,80,67);
 	}
 
-	.btn.microphone-off:hover{
-		background-color: rgb(224,80,67);
+	.btn.microphone-on {
+		background-color:rgb(77, 77, 77);
 	}
 
 	.btn.microphone-on:hover {
 		background-color: rgb(59, 58, 58);
 	}
+
+	.btn.microphone-off {
+		background-color: rgb(234, 67, 53);
+	}
+
+	.btn.microphone-off:hover {
+		background-color: rgb(224,80,67);
+	}
+
 </style>
