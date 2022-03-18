@@ -1,4 +1,10 @@
-<script>
+<script lang="ts">
+	import type { Writable } from "svelte/store";
+
+	import Info from "./Info.svelte";
+	import Time from "./Time.svelte";
+
+	export let meeting: Writable<{}>;
 
     function reload(){
         location.reload();
@@ -6,59 +12,42 @@
 </script>
 
 <header>
-    <h1>
-        <button class="logo-button" on:click={reload}>
-            <img class="logo-img" src="assets/aperture.png" alt="logo" 
-            width = "50">
-        </button>
-    </h1>
+	<div id="logo">
+		<button on:click={reload}>
+			<img src="assets/aperture.png" alt="logo" width = "20px">
+			<h1>MeetNow</h1>
+		</button>
+	</div>
+
+	<Time />
+	<Info {meeting} />
 </header>
 
 <style>
+	header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		flex-direction: row;
+		margin-bottom: 20px;
+		padding: 0 20px;
+	}
 
-    .logo-button {
+    #logo button {
 		background-color: transparent;
-		color: transparent;
-		border-radius: 50%;
 		border: none;
 		cursor: pointer;
-		width: 60px;
-		height: 60px;
         top: 20px;
 	}
 	
-	.logo-button:hover {
-		background-color: transparent;
-		
+	#logo img {
+		filter: invert(1);
+		margin-right: 6px;
 	}
 
-	.logo-img {
-		-webkit-filter: invert(1);
-   		filter: invert(1);
-	}
-
-    .message {
+	#logo h1 {
 		color: white;
-		background-color: blue;
-		position: absolute;
-		top: 50%;
-		left: 50%;
-		transform: translate(-50%, -50%);
-		font-family: Arial;
-		font-weight: bold;
-		font-size: 26px;
-		border-radius: 10px;
-		padding: 10px;
+		font-size: 27px;
+		display: inline;
 	}
-
-	.message.success {
-		background-color: green;
-	}
-
-	.message.error {
-		background-color: red;
-	}
-
-
-
 </style>
