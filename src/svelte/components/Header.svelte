@@ -4,11 +4,17 @@
 	import Info from "./Info.svelte";
 	import Time from "./Time.svelte";
 
-	export let meeting: Writable<{}>;
+	export let meeting: Writable<MeetingInfo>;
 
     function reload(){
         location.reload();
     }
+
+	type MeetingInfo = {
+        id?: string;
+        password?: string;
+        temporary: boolean;
+    };
 </script>
 
 <header>
