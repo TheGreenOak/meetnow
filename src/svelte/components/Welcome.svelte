@@ -23,65 +23,58 @@
 	}
 </script>
 
-<button id="start-btn" class="unselectable" on:click={startMeeting}>Start Meeting</button>
+<div id="container">
+    <button id="start-btn" class="btn" on:click={startMeeting}>Start Meeting</button>
+    
+    <form id="meeting-form" on:submit|preventDefault={joinMeeting}>
+        <input type="text"     class="details" name="meeting-id"       placeholder="ID"       bind:value={id} />
+        <input type="password" class="details" name="meeting-password" placeholder="Password" bind:value={password} />
 
-<form id="meeting-form" class="pre-meeting unselectable" on:submit|preventDefault={joinMeeting}>
-    <input type="text" id="meeting-id" name="meeting-id" placeholder="ID" bind:value={id} />
-    <input type="password" id="meeting-password" name="meeting-password" placeholder="Password" bind:value={password} />
-</form>
-
-<button id="join-btn" class="unselectable" type="submit" value="Join" on:click={joinMeeting}>Join Meeting</button>
+        <input type="submit" id="join-btn" class="btn" value="Join" />
+    </form>
+</div>
 
 <style>
-	input {
-		width:25%;
-        margin-left:37.5%;
-        margin-right:37.5%;
+    #container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+
+        margin-top: 24vh;
+    }
+
+    #start-btn {
+        width: 40vw;
+    }
+
+    #container button {
+        user-select: none;
+    }
+
+    #meeting-form {
+        display: flex;
+        flex-direction: row;
+    }
+
+    #meeting-form .details {
 		background-color: transparent;
 		color: white;
 		outline-color: transparent;
 		border-color: #52595D;
 	}
 
-	input:hover {
+	#meeting-form .details:hover {
 		border-color: #afa390;;
 	}
 
-	.unselectable {
-    	user-select: none;
-	}
-
-    #start-btn {
-        width:25%;
-        margin-left:37.5%;
-        margin-right:37.5%;
+    .btn {
 		background-color: #125AB8;
 		color: white;
 		border: none;
 		cursor: pointer;
 	}
 
-	#start-btn:hover {
+	.btn:hover {
 		background-color: #1350A0;
 	}
-
-    #join-btn {
-        width:25%;
-        margin-left:37.5%;
-        margin-right:37.5%;
-		background-color: #125AB8;
-		color: white;
-		border: none;
-		cursor: pointer;
-    }
-
-	#join-btn:hover {
-		background-color: #1350A0;
-	}
-
-    #meeting-form {
-        width:25%;
-        margin-left:37.5%;
-        margin-right:37.5%;
-    }
 </style>
