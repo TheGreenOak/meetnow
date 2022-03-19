@@ -33,6 +33,20 @@
 <button id="join-btn" class="unselectable" type="submit" value="Join" on:click={joinMeeting}>Join Meeting</button>
 
 <style>
+	input {
+		width:25%;
+        margin-left:37.5%;
+        margin-right:37.5%;
+		background-color: transparent;
+		color: white;
+		outline-color: transparent;
+		border-color: #52595D;
+	}
+
+	input:hover {
+		border-color: #afa390;;
+	}
+
 	.unselectable {
 		-moz-user-select: -moz-none;
     	-khtml-user-select: none;
@@ -45,15 +59,31 @@
         width:25%;
         margin-left:37.5%;
         margin-right:37.5%;
+		background-color: #125AB8;
+		color: white;
+		border: none;
+		cursor: pointer;
+	}
+
+	#start-btn:hover {
+		background-color: #1350A0;
 	}
 
     #join-btn {
         width:25%;
         margin-left:37.5%;
         margin-right:37.5%;
+		background-color: #125AB8;
+		color: white;
+		border: none;
+		cursor: pointer;
     }
 
-    #meeting-form {
+	#join-btn:hover {
+		background-color: #1350A0;
+	}
+
+    #hmeeting-form {
         width:25%;
         margin-left:37.5%;
         margin-right:37.5%;
