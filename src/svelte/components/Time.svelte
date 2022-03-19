@@ -18,10 +18,19 @@
     });
 </script>
 
-<h1>{hour}:{minute}</h1>
+<h1 class="unselectable">{hour}:{minute}</h1>
 
 <style>
     h1 {
         color: white;
     }
+
+    .unselectable {
+		-moz-user-select: -moz-none;
+    	-khtml-user-select: none;
+    	-webkit-user-select: none;
+    	-o-user-select: none;
+    	user-select: none;
+	}
+    
 </style>
