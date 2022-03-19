@@ -35,13 +35,13 @@
 
 {#if inMeeting}
     <div on:click={copyDetails} title="Click to copy!">
-        <h3 class="unselectable">ID: {id}</h3>
-        <h3 class="unselectable">Pass: {password}</h3>
+        <h3>ID: {id}</h3>
+        <h3>Pass: {password}</h3>
         
         <!--TODO: use ●●●●●●●● for password-->
     </div>
 {:else}
-    <h2 class="unselectable">Not in a meeting</h2>
+    <h2>Not in a meeting</h2>
 {/if}
 
 <style>
@@ -50,22 +50,17 @@
         flex-direction: column;
         cursor: pointer;
         text-align: right;
+
+        user-select: none;
     }
 
     h2 {
         color: white;
+        user-select: none;
     }
 
     h3 {
         color: white;
         margin: 0;
     }
-
-    .unselectable {
-		-moz-user-select: -moz-none;
-    	-khtml-user-select: none;
-    	-webkit-user-select: none;
-    	-o-user-select: none;
-    	user-select: none;
-	}
 </style>

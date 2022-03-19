@@ -48,10 +48,6 @@
 	}
 
 	.unselectable {
-		-moz-user-select: -moz-none;
-    	-khtml-user-select: none;
-    	-webkit-user-select: none;
-    	-o-user-select: none;
     	user-select: none;
 	}
 
@@ -83,7 +79,7 @@
 		background-color: #1350A0;
 	}
 
-    #hmeeting-form {
+    #meeting-form {
         width:25%;
         margin-left:37.5%;
         margin-right:37.5%;

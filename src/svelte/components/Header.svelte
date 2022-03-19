@@ -18,7 +18,7 @@
 </script>
 
 <header>
-	<div id="logo" class="unselectable" title="MeetNow">
+	<div id="logo" title="MeetNow">
 		<button on:click={reload}>
 			<img src="assets/aperture.png" alt="logo" width = "20px">
 			<h1>MeetNow</h1>
@@ -39,12 +39,8 @@
 		padding: 0 20px;
 	}
 
-	.unselectable {
-		-moz-user-select: -moz-none;
-    	-khtml-user-select: none;
-    	-webkit-user-select: none;
-    	-o-user-select: none;
-    	user-select: none;
+	#logo {
+		user-select: none;
 	}
 
     #logo button {
