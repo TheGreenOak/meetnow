@@ -33,9 +33,6 @@ function serve() {
 export default {
 	input: 'src/svelte/main.ts',
 	output: {
-		globals: {
-			net: 'net'
-		},
 		sourcemap: true,
 		format: 'iife',
 		name: 'app',

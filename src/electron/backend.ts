@@ -389,7 +389,7 @@ export class Networking extends EventEmitter {
 
             else if (deserialized.type == "switched") {
                 this.state.host = false;
-                this.emit("hostChange", false); // false indicates the user is no longer the host
+                this.emit("host-change", false); // false indicates the user is no longer the host
             }
 
             else if (deserialized.type == "disconnected") {
@@ -434,7 +434,7 @@ export class Networking extends EventEmitter {
 
             else if (deserialized.type == "switched") {
                 this.state.host = true;
-                this.emit("hostChange", true); // true indicating the user is the new host
+                this.emit("host-change", true); // true indicating the user is the new host
             }
 
             else if (deserialized.type == "disconnected") {

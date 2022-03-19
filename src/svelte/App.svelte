@@ -37,11 +37,25 @@
 			});
 		}
 
+		else if (state.newState == "disconnected" && !state.me) {
+			meeting.set({
+				host: true,
+				temporary: true
+			});
+		}
+
 		else if (state.newState == "ended" || (state.newState == "disconnected" && state.me)) {
 			meeting.set({ temporary: false });
 
 			inMeeting = false;
 		}
+	});
+
+	net.on("host-change", newState => {
+		meeting.set({
+			host: newState,
+			temporary: true
+		});
 	});
 </script>
 

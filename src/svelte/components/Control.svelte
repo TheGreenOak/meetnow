@@ -1,5 +1,6 @@
 <script lang="ts">
     import { createEventDispatcher } from "svelte";
+    import { meeting } from "../meetingStore";
 
     import type { Networking } from "../../electron/backend";
     import type Media from "../media";
@@ -11,6 +12,11 @@
 
     let webcamOn = false;
     let micOn = false;
+    let host = false;
+
+    meeting.subscribe(info => {
+        host = info?.host;
+    });
 
     function toggleWebcam() {
 		webcamOn = webcamOn ? false : true;
@@ -63,9 +69,15 @@
     </div>
 
     <div class="item">
-        <button id="leave" on:click={leaveMeeting}>
+        <button class="leave-control" on:click={leaveMeeting}>
             Leave Meeting
         </button>
+
+        {#if host}
+            <button class="leave-control" on:click={endMeeting}>
+                End Meeting
+            </button>
+        {/if}
     </div>
 </div>
 
@@ -131,7 +143,7 @@
 		background-color: rgb(224,80,67);
 	}
 
-    #leave {
+    .leave-control {
         color: white;
         font-weight: bold;
         font-size: 20px;
@@ -147,7 +159,7 @@
         cursor: pointer;
     }
 
-    #leave:hover {
+    .leave-control:hover {
         background-color: rgb(231, 95, 82);
     }
 </style>
