@@ -1,13 +1,12 @@
 <script lang="ts">
-	import { Writable, writable } from "svelte/store";
 	import type { Networking, SignalingState } from "../electron/backend";
+	import { meeting } from "./meetingStore";
 
 	import Header from "./components/Header.svelte";
 	import Welcome from "./components/Welcome.svelte";
 	import Meeting from "./components/Meeting.svelte";
 	
 	const net: Networking = (window as any).networking;
-	const meeting: Writable<MeetingInfo> = writable();
 
 	let id: string | undefined;
 	let password: string | undefined;
@@ -33,6 +32,7 @@
 			meeting.set({
 				id: id,
 				password: password,
+				host: state.host,
 				temporary: false
 			});
 		}
@@ -43,20 +43,14 @@
 			inMeeting = false;
 		}
 	});
-
-	type MeetingInfo = {
-        id?: string;
-        password?: string;
-        temporary: boolean;
-    };
 </script>
 
-<Header {meeting} />
+<Header />
 
 {#if inMeeting}
 	<Meeting />
 {:else}
-	<Welcome {meeting} />
+	<Welcome />
 {/if}
 
 <style>

@@ -1,20 +1,12 @@
 <script lang="ts">
-	import type { Writable } from "svelte/store";
+	import { meeting } from "../meetingStore";
 
 	import Info from "./Info.svelte";
 	import Time from "./Time.svelte";
 
-	export let meeting: Writable<MeetingInfo>;
-
     function reload(){
         location.reload();
     }
-
-	type MeetingInfo = {
-        id?: string;
-        password?: string;
-        temporary: boolean;
-    };
 </script>
 
 <header>
@@ -26,7 +18,7 @@
 	</div>
 
 	<Time />
-	<Info {meeting} />
+	<Info />
 </header>
 
 <style>

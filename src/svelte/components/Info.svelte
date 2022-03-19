@@ -1,7 +1,5 @@
 <script lang="ts">
-    import type { Writable } from "svelte/store";
-
-    export let meeting: Writable<MeetingInfo>;
+    import { meeting } from "../meetingStore";
 
     let id: string | undefined;
     let password: string | undefined;
@@ -21,12 +19,6 @@
             password = info?.password;
         }
     });
-
-    type MeetingInfo = {
-        id?: string;
-        password?: string;
-        temporary: boolean;
-    };
 
     function copyDetails() {
         navigator.clipboard.writeText("Join my meeting!\nmeetnow.yeho.dev/" + id + "|" + password);

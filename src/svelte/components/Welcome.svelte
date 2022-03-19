@@ -1,8 +1,7 @@
 <script lang="ts">
-    import type { Writable } from "svelte/store";
     import type { Networking } from "../../electron/backend";
+    import { meeting } from "../meetingStore";
 
-    export let meeting: Writable<{}>;
     const net: Networking = (window as any).networking;
 
     let id: string | undefined;
