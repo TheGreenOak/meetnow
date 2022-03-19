@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { onDestroy } from "svelte";
 	import type { Networking } from "../../electron/backend";
+
 	import Media from "../media";
 	import Control from "./Control.svelte";
 
@@ -46,17 +48,25 @@
 			cam.play();
 
 			webcamOn = true;
+		} else {
+			webcamOn = false;
 		}
 	}
 
 	function micHandler(event: CustomEvent<boolean>) {
 		if (event.detail == true) {
 			mic.srcObject = userMedia.getAudioStream();
-			mic.play();
-
 			micOn = true;
+		} else {
+			micOn = false;
 		}
 	}
+
+	onDestroy(() => {
+		userMedia.disableVideo();
+		userMedia.disableAudio();
+		userMedia.disableScreenshare();
+	});
 
 	let myCanvas: HTMLCanvasElement = null;
 </script>
@@ -65,16 +75,30 @@
     <button on:click={sendFrame}>Send frame</button>
 {/if}
 
-<canvas bind:this={myCanvas}></canvas>
+<div class="container">
+	<div class="video-container">
+		<!-- svelte-ignore a11y-media-has-caption -->
+		<video bind:this={cam} width="848" height="480" />
+		<canvas bind:this={myCanvas}></canvas>
+	</div>
 
-<!-- svelte-ignore a11y-media-has-caption -->
-<video bind:this={cam} width="848" height="480" />
-<audio bind:this={mic}/>
+	<Control {userMedia} on:cam={camHandler} on:mic={micHandler} />
+</div>
 
-<Control {userMedia} on:cam={camHandler} on:mic={micHandler} />
 
 <style>
-	:global(body) {
-		background-color: rgb(26 28 29);;
+	.container {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+	}
+
+	.video-container {
+		display: flex;
+		flex-direction: row;
+		flex: 1;
+		align-items: center;
+		justify-content: center;
+		gap: 50px;
 	}
 </style>

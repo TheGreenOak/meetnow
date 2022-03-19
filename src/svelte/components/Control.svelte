@@ -73,10 +73,6 @@
     #container {
         display: flex;
         flex-direction: row;
-
-        position: fixed;
-        bottom: 0px;
-        width: 98.5%;
     }
 
     #main-control {

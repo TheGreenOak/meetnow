@@ -51,12 +51,18 @@
     };
 </script>
 
-<main>
-	<Header {meeting} />
+<Header {meeting} />
 
-    {#if inMeeting}
-        <Meeting />
-    {:else}
-        <Welcome {meeting} />
-    {/if}
-</main>
+{#if inMeeting}
+	<Meeting />
+{:else}
+	<Welcome {meeting} />
+{/if}
+
+<style>
+	:global(body) {
+		background-color: rgb(26 28 29);;
+		display: flex;
+		flex-direction: column;
+	}
+</style>
