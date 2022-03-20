@@ -12,10 +12,24 @@
 
     let webcamOn = false;
     let micOn = false;
+
     let host = false;
+    let statusMessage = "Waiting for peer...";
 
     meeting.subscribe(info => {
-        host = info?.host;
+        if (info?.host) host = info.host;
+        
+        if (info?.connected) {
+            statusMessage = "Connecting...";
+        }
+
+        else if (info?.disconnected) {
+            statusMessage = "Waiting for peer...";
+        }
+
+        else if (info?.ready) {
+            statusMessage = "Connected";
+        }
     });
 
     function toggleWebcam() {
@@ -56,7 +70,7 @@
 
 <div id="container">
     <div class="item">
-        <h2>Waiting for peer...</h2>
+        <h2>{statusMessage}</h2>
     </div>
 
     <div id="main-control" class="item">
@@ -99,6 +113,7 @@
         display: flex;
         justify-content: center;
         align-items: center;
+        user-select: none;
     }
 
     .item:first-child > h2 {

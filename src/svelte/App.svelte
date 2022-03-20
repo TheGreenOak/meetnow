@@ -37,9 +37,17 @@
 			});
 		}
 
+		else if (state.newState == "connected" && !state.me) {
+			meeting.set({
+				connected: true,
+				temporary: true
+			});
+		}
+
 		else if (state.newState == "disconnected" && !state.me) {
 			meeting.set({
 				host: true,
+				disconnected: true,
 				temporary: true
 			});
 		}
