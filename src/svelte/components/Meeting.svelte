@@ -72,33 +72,40 @@
 </script>
 
 {#if ready}
-    <button on:click={sendFrame}>Send frame</button>
+    <button class="temp" on:click={sendFrame}>Send frame</button>
 {/if}
 
-<div class="container">
 	<div class="video-container">
 		<!-- svelte-ignore a11y-media-has-caption -->
-		<video bind:this={cam} width="848" height="480" />
-		<canvas bind:this={myCanvas}></canvas>
+		<video bind:this={cam} height="480" width="852"/>
+	</div>
+	<div id="footer">
+		<Control {userMedia} on:cam={camHandler} on:mic={micHandler} />
 	</div>
 
-	<Control {userMedia} on:cam={camHandler} on:mic={micHandler} />
-</div>
-
-
 <style>
-	.container {
-		display: flex;
-		flex-direction: column;
-		flex: 1;
+	.video-container {
+		position: relative;
+		bottom: 0;
 	}
 
-	.video-container {
-		display: flex;
-		flex-direction: row;
-		flex: 1;
-		align-items: center;
-		justify-content: center;
-		gap: 50px;
+	video {
+		position: fixed;
+    	top: 50%;
+    	left: 50%;
+		transform: translate(-50%, -50%);
+		width: 75vw;
+		height: 75vh;
+		background-color: magenta;
+	}
+
+	#footer {
+		position: fixed;
+		bottom: 0;
+    	width: 98.5%
+	}
+
+	.temp {
+		position: absolute;
 	}
 </style>
