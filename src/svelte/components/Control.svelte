@@ -106,6 +106,7 @@
         flex-direction: row;
         justify-content: center;
         gap: 10px;
+        user-select: none;
     }
 
     .item {
@@ -172,6 +173,7 @@
         padding: 3px;
 
         cursor: pointer;
+        user-select: none;
     }
 
     .leave-control:hover {
