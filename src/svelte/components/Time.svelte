@@ -24,6 +24,7 @@
     h1 {
         color: white;
         user-select: none;
+        margin: 0;
     }
     
 </style>

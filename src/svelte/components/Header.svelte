@@ -27,8 +27,6 @@
 		justify-content: space-between;
 		align-items: center;
 		flex-direction: row;
-		margin-bottom: 20px;
-		padding: 0 20px;
 	}
 
 	#logo {

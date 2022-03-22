@@ -49,6 +49,7 @@
     h2 {
         color: white;
         user-select: none;
+        margin: 0;
     }
 
     h3 {
