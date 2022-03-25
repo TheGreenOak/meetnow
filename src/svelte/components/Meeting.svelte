@@ -50,10 +50,12 @@
 			data = data.substring(1);
 
 			if (data == "END") {
-				videoBufferIndex = 0;
 				userMedia.stringToBitmap(videoBuffer, 640, 360).then(bitmap => {
 					peerVideo.getContext("2d").drawImage(bitmap, 0, 0);
 				});
+
+				videoBuffer = "";
+				videoBufferIndex = 0;
 			}
 
 			else {
@@ -110,7 +112,7 @@
 	<div class="video-container">
 		<!-- svelte-ignore a11y-media-has-caption -->
 		<video bind:this={cam} height="480" width="848"/>
-		<canvas bind:this={peerVideo} />
+		<canvas bind:this={peerVideo} height="360" width="640" />
 	</div>
 	<div id="footer">
 		<Control {userMedia} on:cam={camHandler} on:mic={micHandler} />
