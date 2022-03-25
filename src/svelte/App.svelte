@@ -33,6 +33,7 @@
 				id: id,
 				password: password,
 				host: state.host,
+				connected: !state.host,
 				temporary: false
 			});
 		}
@@ -57,6 +58,13 @@
 
 			inMeeting = false;
 		}
+	});
+
+	net.on("ready", () => {
+		meeting.set({
+			ready: true,
+			temporary: true
+		});
 	});
 
 	net.on("host-change", newState => {
