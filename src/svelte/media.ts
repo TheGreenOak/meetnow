@@ -199,7 +199,7 @@ export default class Media {
 		return converted;
 	}
     
-    private stringToBitmap(str: string, width: number, height: number): Promise<ImageBitmap> {
+    public stringToBitmap(str: string, width: number, height: number): Promise<ImageBitmap> {
         return new Promise<ImageBitmap>((resolve, reject) => {
             let converted: Uint8ClampedArray = new Uint8ClampedArray(width * height * 4);
 

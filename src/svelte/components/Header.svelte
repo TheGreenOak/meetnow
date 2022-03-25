@@ -1,6 +1,4 @@
 <script lang="ts">
-	import { meeting } from "../meetingStore";
-
 	import Info from "./Info.svelte";
 	import Time from "./Time.svelte";
 
