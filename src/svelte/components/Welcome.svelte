@@ -26,33 +26,45 @@
     <button id="start-btn" class="btn" on:click={startMeeting}>Start Meeting</button>
     
     <form id="meeting-form" on:submit|preventDefault={joinMeeting}>
-        <input type="text"     class="details" name="meeting-id"       placeholder="ID"       bind:value={id} />
-        <input type="password" class="details" name="meeting-password" placeholder="Password" bind:value={password} />
-
-        <input type="submit" id="join-btn" class="btn" value="Join" />
-    </form>
+        <input type="text"     class="details form-length" name="meeting-id"       placeholder="ID"       bind:value={id} />
+        <input type="password" class="details form-length" name="meeting-password" placeholder="Password" bind:value={password} />
+		<input type="submit"  id="join-btn" class="btn form-length" value="Join">
+	</form>
 </div>
 
 <style>
     #container {
         display: flex;
         flex-direction: column;
-        align-items: center;
-
+		align-items: center;
+		align-self: center;
         margin-top: 24vh;
+		width: 40vw;
     }
-
+	
     #start-btn {
-        width: 40vw;
+		user-select: none;
+		width: 40vw;
     }
 
-    #container button {
-        user-select: none;
-    }
+	#start-btn:active {
+		transform: scale(0.9);
+	}
+
+	.form-length {
+		width: 13vw;
+	}
+
+	#join-btn:active {
+		transform: scale(0.9);
+	}
 
     #meeting-form {
-        display: flex;
-        flex-direction: row;
+		display: flex;
+		flex-direction: row;
+		gap: 0.5vw;
+		justify-content: center;
+		white-space: nowrap;
     }
 
     #meeting-form .details {
@@ -60,6 +72,7 @@
 		color: white;
 		outline-color: transparent;
 		border-color: #52595D;
+		user-select: none;
 	}
 
 	#meeting-form .details:hover {
@@ -70,10 +83,32 @@
 		background-color: #125AB8;
 		color: white;
 		border: none;
+		transition: all 0.5s;
 		cursor: pointer;
 	}
 
-	.btn:hover {
-		background-color: #1350A0;
+	.btn span {
+		cursor: pointer;
+		display: inline-block;
+		position: relative;
+		transition: 0.5s;
+	}
+
+	.btn span:after {
+		content: '\00bb';
+		position: absolute;
+		opacity: 0;
+		top: 0;
+		right: -20px;
+		transition: 0.5s;
+	}
+
+	.btn:hover span {
+		padding-right: 25px;
+	}
+
+	.btn:hover span:after {
+		opacity: 1;
+		right: 0;
 	}
 </style>
