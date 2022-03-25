@@ -22,14 +22,14 @@
 				// how do i send it plz
 
 				let j = 0;
-				for (let i = 0; i < frame.length; i += 10000) {
-					if (i + 10000 >= frame.length) {
-						net.send("V" + String.fromCharCode(j) + frame.substring(i));
+				for (let i = 0; i < frame.length; i += 512) {
+					if (i + 512 >= frame.length) {
+						net.send("V" + toShortBytes(j) + frame.substring(i));
 					} else {
-						net.send("V" + String.fromCharCode(j) + frame.substring(i, i + 10000));
+						net.send("V" + toShortBytes(j) + frame.substring(i, i + 512));
 					}
 
-					await new Promise(r => setTimeout(r, 100));
+					await new Promise(r => setTimeout(r, 1));
 					j++;
 				}
 
@@ -40,6 +40,22 @@
 
 			.catch(err => console.error(err));
 		}
+	}
+
+	function toShortBytes(value: number): string {
+		let highBytes = (value & 65280) >> 4; // 65280 == one byte ON,  one byte OFF
+		let lowBytes = (value & 255);	      // 255   == one byte OFF, one byte ON
+
+		return String.fromCharCode(highBytes) + String.fromCharCode(lowBytes);
+	}
+
+	function shortToNumber(value: string): number {
+		let finalValue: number;
+
+		finalValue = value.charCodeAt(0) << 4;
+		finalValue += value.charCodeAt(1);
+
+		return finalValue;
 	}
 
 	let videoBuffer: string;
@@ -59,11 +75,11 @@
 			}
 
 			else {
-				let index = data.charCodeAt(0);
-				data = data.substring(1);
+				let index = shortToNumber(data);
+				data = data.substring(2);
 
 				while (videoBufferIndex < index) {
-					for (let i = 0; i < 10000; i++) {
+					for (let i = 0; i < 512; i++) {
 						videoBuffer += String.fromCharCode(0); // fill in with black space
 					}
 
