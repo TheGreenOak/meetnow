@@ -21,15 +21,41 @@
     });
 </script>
 
-{#each notificationArray as notification}
-    <div class="notification {notification?.type}">
-        <h2>{notification?.data}</h2>
-    </div>
-{/each}
+<div class="container">
+    {#each notificationArray as notification}
+        <div class="notification {notification?.type}">
+            {notification?.data}
+        </div>
+    {/each}
+</div>
 
 <style>
-    .notification {
+    .container {
+        position: fixed;
+        display: flex;
+        flex-direction: column;
+        bottom: 60px;
+        gap: 5px;
+        left: 5px;
+        user-select: none;
+    }
 
+    .notification {
+        border-radius: 5px;
+        color: white;
+        padding: 5px;
+        font-size: 1.2em;
+        animation: fadeIn 0.7s;
+        opacity: 1;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
     }
 
     .success {
