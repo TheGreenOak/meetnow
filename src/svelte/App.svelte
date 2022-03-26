@@ -37,12 +37,22 @@
 				connected: !state.host,
 				temporary: false
 			});
+
+			notifications.set({
+				data: "You've joined a meeting",
+				type: "success"
+			});
 		}
 
 		else if (state.newState == "connected" && !state.me) {
 			meeting.set({
 				connected: true,
 				temporary: true
+			});
+
+			notifications.set({
+				data: "A peer is connecting...",
+				type: "info"
 			});
 		}
 
@@ -52,10 +62,36 @@
 				disconnected: true,
 				temporary: true
 			});
+
+			notifications.set({
+				data: "Your peer left the meeting",
+				type: "info"
+			});
 		}
 
-		else if (state.newState == "ended" || (state.newState == "disconnected" && state.me)) {
+		else if (state.newState == "ended" || (state.newState == "disconnected" && state.me)) {			
 			meeting.set({ temporary: false });
+			
+			let notificationData: string;
+			let notificationType: "success" | "info" | "error" = "success";
+
+			if (state.newState == "disconnected") {
+				notificationData = "You've left the meeting";
+			}
+
+			else if (state.newState == "ended" && state.me) {
+				notificationData = "You've ended the meeting";
+			}
+
+			else {
+				notificationData = "The meeting you were in has ended";
+				notificationType = "info";
+			}
+
+			notifications.set({
+				data: notificationData,
+				type: notificationType
+			});
 
 			inMeeting = false;
 		}
@@ -79,6 +115,11 @@
 		meeting.set({
 			host: newState,
 			temporary: true
+		});
+
+		notifications.set({
+			data: `You're ${newState ? "now" : "no longer"} the host`,
+			type: "info"
 		});
 	});
 </script>
