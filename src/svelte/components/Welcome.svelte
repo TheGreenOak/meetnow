@@ -23,7 +23,7 @@
 </script>
 
 <div id="container">
-    <button id="start-btn" class="btn" on:click={startMeeting}>Start Meeting</button>
+    <button id="start-btn" class="btn" on:click={startMeeting}><span>Start Meeting</span></button>
     
     <form id="meeting-form" on:submit|preventDefault={joinMeeting}>
         <input type="text"     class="details form-length" name="meeting-id"       placeholder="ID"       bind:value={id} />
