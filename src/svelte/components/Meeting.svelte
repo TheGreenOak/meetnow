@@ -127,8 +127,8 @@
 
 	<div class="video-container">
 		<!-- svelte-ignore a11y-media-has-caption -->
-		<video bind:this={cam} height="480" width="848"/>
 		<canvas bind:this={peerVideo} height="360" width="640" />
+		<video bind:this={cam} height="480" width="848"/>
 	</div>
 	<div id="footer">
 		<Control {userMedia} on:cam={camHandler} on:mic={micHandler} />
@@ -136,14 +136,24 @@
 
 <style>
 	.video-container {
+		display: flex;
 		position: relative;
 		bottom: 0;
 	}
 
 	video {
 		position: fixed;
+		bottom: 0;
+		right: 0;
+		background-color: transparent;
+		width: 17vw;
+		height: 45vh;
+	}
+
+	canvas {
+		position: fixed;
     	top: 50%;
-    	left: 50%;
+    	left: 45%;
 		transform: translate(-50%, -50%);
 		width: 75vw;
 		height: 75vh;
