@@ -118,7 +118,7 @@
 		userMedia.disableScreenshare();
 	});
 
-	let peerVideo: HTMLCanvasElement = null;
+	let peerVideo: HTMLCanvasElement;
 </script>
 
 {#if ready}
