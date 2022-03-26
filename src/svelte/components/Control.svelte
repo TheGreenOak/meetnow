@@ -1,6 +1,6 @@
 <script lang="ts">
     import { createEventDispatcher } from "svelte";
-    import { meeting } from "../meetingStore";
+    import { meeting } from "../stores";
 
     import type { Networking } from "../../electron/backend";
     import type Media from "../media";

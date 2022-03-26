@@ -1,6 +1,7 @@
 import { Writable, writable } from "svelte/store";
 
 export const meeting: Writable<MeetingInfo> = writable();
+export const notifications: Writable<NotificationInfo> = writable();
 
 type MeetingInfo = {
     id?: string;
@@ -12,4 +13,9 @@ type MeetingInfo = {
     ready?: boolean;
     
     temporary: boolean;
+};
+
+export type NotificationInfo = {
+    data: string;
+    type: "success" | "info" | "error";
 };

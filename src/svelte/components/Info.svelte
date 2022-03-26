@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { meeting } from "../meetingStore";
+    import { meeting } from "../stores";
 
     let id: string | undefined;
     let password: string | undefined;

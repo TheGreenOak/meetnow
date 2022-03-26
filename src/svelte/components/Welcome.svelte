@@ -1,6 +1,6 @@
 <script lang="ts">
     import type { Networking } from "../../electron/backend";
-    import { meeting } from "../meetingStore";
+    import { meeting } from "../stores";
 
     const net: Networking = (window as any).networking;
 

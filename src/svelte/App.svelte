@@ -1,10 +1,11 @@
 <script lang="ts">
 	import type { Networking, SignalingState } from "../electron/backend";
-	import { meeting } from "./meetingStore";
+	import { meeting, notifications } from "./stores";
 
 	import Header from "./components/Header.svelte";
 	import Welcome from "./components/Welcome.svelte";
 	import Meeting from "./components/Meeting.svelte";
+	import Notifications from "./components/Notifications.svelte";
 	
 	const net: Networking = (window as any).networking;
 
@@ -60,6 +61,13 @@
 		}
 	});
 
+	net.on("error", err => {
+		notifications.set({
+			data: err,
+			type: "error"
+		});
+	});
+
 	net.on("ready", () => {
 		meeting.set({
 			ready: true,
@@ -75,6 +83,7 @@
 	});
 </script>
 
+<Notifications />
 <Header />
 
 {#if inMeeting}
