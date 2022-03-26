@@ -127,8 +127,8 @@
 
 	<div class="video-container">
 		<!-- svelte-ignore a11y-media-has-caption -->
-		<canvas bind:this={peerVideo} height="360" width="640" />
 		<video bind:this={cam} height="480" width="848"/>
+		<canvas bind:this={peerVideo} height="360" width="640" />
 	</div>
 	<div id="footer">
 		<Control {userMedia} on:cam={camHandler} on:mic={micHandler} />
