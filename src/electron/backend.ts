@@ -463,10 +463,7 @@ export class Networking extends EventEmitter {
         else if (deserialized.response == "error") {
             this.emit("error", deserialized.reason);
 
-            // If we have attempted joining a meeting, and we got a join error, invalidate the local meeting state.
-            if ((deserialized.reason?.search("meeting ID") != -1 || deserialized.reason?.search("password") != -1)
-                && this.state.joinAttempted) {
-
+            if (this.state.joinAttempted) {
                 this.state.joinAttempted = false;
                 this.invalidateMeetingState();
             }
