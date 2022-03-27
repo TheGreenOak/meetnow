@@ -5,6 +5,12 @@
     let activeNotifications: Notification = {};
     $: notificationArray = Object.entries(activeNotifications);
 
+    setInterval(() => {
+        if (Object.keys(activeNotifications).length == 0) {
+            activeNotifications = activeNotifications;
+        }
+    }, 200);
+
     notifications.subscribe(notification => {
         if (notification) {
             const id = crypto.randomUUID();
@@ -13,7 +19,7 @@
             setTimeout(() => {
                 setTimeout(() => {
                     delete activeNotifications[id];
-                    activeNotifications = activeNotifications;
+                    document.getElementById(id).style.display = "none";
                 }, 500);
 
                 document.getElementById(id).classList.add("hide");
