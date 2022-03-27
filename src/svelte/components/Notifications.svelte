@@ -2,28 +2,33 @@
     import { notifications } from "../stores";
     import type { NotificationInfo } from "../stores";
 
-    let activeNotifications = {};
-    let currentNotification = 0;
-
-    $: notificationArray = Object.values<NotificationInfo>(activeNotifications);
+    let activeNotifications: Notification = {};
+    $: notificationArray = Object.entries(activeNotifications);
 
     notifications.subscribe(notification => {
         if (notification) {
-            const id = currentNotification++;
+            const id = crypto.randomUUID();
             activeNotifications[id] = notification;
 
             setTimeout(() => {
-                delete activeNotifications[id];
-                activeNotifications = activeNotifications;
-                currentNotification--;
+                setTimeout(() => {
+                    delete activeNotifications[id];
+                    activeNotifications = activeNotifications;
+                }, 500);
+
+                document.getElementById(id).classList.add("hide");
             }, 2500);
         }
     });
+
+    type Notification = {
+        [key: string]: NotificationInfo;
+    };
 </script>
 
 <div class="container">
-    {#each notificationArray as notification}
-        <div class="notification {notification?.type}">
+    {#each notificationArray as [id, notification]}
+        <div id="{id}" class="notification {notification?.type}">
             {notification?.data}
         </div>
     {/each}
@@ -45,16 +50,26 @@
         color: white;
         padding: 5px;
         font-size: 1.2em;
-        animation: fadeIn 0.7s;
-        opacity: 1;
+        animation: slideIn 0.7s;
     }
 
-    @keyframes fadeIn {
-        from {
-            opacity: 0;
+    .hide {
+        visibility: hidden;
+        opacity: 0;
+        transition: visibility 0s 0.5s, opacity 0.5s linear;
+    }
+
+    @keyframes slideIn {
+        0% {
+            transform: translateX(-500px);
         }
-        to {
-            opacity: 1;
+
+        85% {
+            transform: translateX(8px);
+        }
+
+        100% {
+            transform: translateX(0);
         }
     }
 
