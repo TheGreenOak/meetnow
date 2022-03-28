@@ -20,5 +20,7 @@ contextBridge.exposeInMainWorld("networking", {
     end:     net.end.bind(net),
     send:    net.send.bind(net),
 
-    on:      (event: string, callback: any) => net.on(event, callback)
+    on:      (event: string, callback: any) => net.on(event, callback),
+
+    encode:  net.encode.bind(net)
 });
