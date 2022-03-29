@@ -2,6 +2,10 @@ import { Socket as UDPSocket, createSocket as createUDPSocket } from "dgram";
 import { Socket as TCPSocket } from "net";
 import { EventEmitter } from "events";
 
+import ffi from "ffi-napi";
+import ref from "ref-napi";
+import path from "path";
+
 const DEFAULT_IP = "meetnow.yeho.dev";
 const STARTING_PORT = 34200;
 const PORT_RANGE = 99;
@@ -56,6 +60,8 @@ export class Networking extends EventEmitter {
     private state: NetworkingState;
     private sockets: NetworkingSockets;
 
+    private readonly codec;
+
     private constructor() {
         super();
 
@@ -65,6 +71,11 @@ export class Networking extends EventEmitter {
             attempts: 0
         };
         this.sockets = {};
+
+        this.codec = ffi.Library(path.join(__dirname, "..", "codec.so"), {
+            "encode": ["string", ["string", "string", ref.types.ushort, ref.types.ushort, ref.types.uchar]],
+            "decode": ["string", ["string", "string", ref.types.ushort, ref.types.ushort]] 
+        });
     }
 
     /**
@@ -683,6 +694,14 @@ export class Networking extends EventEmitter {
         }
 
         this.sockets.communication.send(Buffer.from(data));
+    }
+
+      /////////////////////////////////////////
+     ///           CODEC METHODS           ///
+    /////////////////////////////////////////
+
+    public encode(frame: string, previousFrame: string, height: number, width: number, threshold: number): string | null {
+        return this.codec.encode(frame, previousFrame, height, width, threshold);
     }
 };
 

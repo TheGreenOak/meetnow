@@ -21,6 +21,9 @@
 			userMedia.getVideoFrame().then(async (frame) => {
 				// how do i send it plz
 
+				let encoded = net.encode(frame, null, 360, 640, 10);
+				console.log(encoded);
+
 				let j = 0;
 				for (let i = 0; i < frame.length; i += 512) {
 					if (i + 512 >= frame.length) {
