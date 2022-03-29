@@ -10,11 +10,12 @@ OUT_DIR     = bin
 OUT_FILE    = build
 
 # JS Variables
-JS_COMPILER = emcc
-JS_FLAGS    = -s EXPORTED_FUNCTIONS=_encode,_decode -s EXPORTED_RUNTIME_METHODS=cwrap -O3
-JS_INCLUDES = -Iinclude
-JS_SOURCE   = src/codec.cpp
-JS_OUT_FILE = codec.js
+JS_FLAGS_OBJ = -c
+JS_FLAGS_LIB = -shared
+JS_INCLUDES  = -Iinclude
+JS_SOURCE    = src/codec.cpp
+OBJ_FILE     = codec.o
+LIB_FILE     = codec.so
 
 build:
 	mkdir -p bin
@@ -22,7 +23,7 @@ build:
 
 js:
 	mkdir -p bin
-	${JS_COMPILER} ${JS_SOURCE} -o ${OUT_DIR}/${JS_OUT_FILE} ${JS_INCLUDES} ${JS_FLAGS}
+	${COMPILER} ${JS_SOURCE} -o ${OUT_DIR}/${OBJ_FILE} ${JS_INCLUDES} ${JS_FLAGS_OBJ} && ${COMPILER} ${JS_FLAGS_LIB} -o ${OUT_DIR}/${LIB_FILE} ${JS_INCLUDES} ${OUT_DIR}/${OBJ_FILE}
 
 run:
 	./${OUT_DIR}/${OUT_FILE}
