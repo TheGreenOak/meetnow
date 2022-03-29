@@ -18,29 +18,23 @@
  * This codec is stored (for now) in Little Endian format.
  */
 
-unsigned char* encode(unsigned char* pixels, unsigned char* previousFrame, unsigned short height, unsigned short width, unsigned char threshold) {
+unsigned int encode(unsigned char* buffer, unsigned char* pixels, unsigned char* previousFrame, unsigned short height, unsigned short width, unsigned char threshold) {
     unsigned char pixel[CHANNELS] = { 0 };
     unsigned char previousPixel[CHANNELS] = { 0 };
-    unsigned char* encoded = ((unsigned char*)new unsigned int[height * width]);
 
     unsigned int counter = 0, currPixel = 0;
     bool previouslySaved = false, isSimilar = false;
 
     if (previousFrame == nullptr) { // If there's no previous frame, don't process.
         for (int i = 0; currPixel < height * width * CHANNELS; i += sizeof(int)) {
-            encoded[i + CHANNELS] = 0;
+            buffer[i + CHANNELS] = 0;
             
             for (int j = 0; j < CHANNELS; j++) {
-                encoded[i + CHANNELS - j - 1] = pixels[currPixel++];
+                buffer[i + CHANNELS - j - 1] = pixels[currPixel++];
             }
         }
 
-        return encoded;
-    }
-
-    // Clear out the encoded array
-    for (unsigned int i = 0; i < height * width * sizeof(int); i++) {
-        encoded[i] = 0;
+        return height * width;
     }
 
     for (currPixel = 0; currPixel < height * width * CHANNELS; currPixel += CHANNELS) {
@@ -62,13 +56,13 @@ unsigned char* encode(unsigned char* pixels, unsigned char* previousFrame, unsig
         if (isSimilar) {
 
             // Check if we reached the max save value
-            if (((int*)encoded)[counter] == MAX_SAVED) {
+            if (((int*)buffer)[counter] == MAX_SAVED) {
                 counter++;
             }
 
             // Keep old pixel
-            ((int*)encoded)[counter] = (((int*)encoded)[counter] | SAVE_BIT); // Indiciate existing information
-            ((int*)encoded)[counter]++;
+            ((int*)buffer)[counter] = (((int*)buffer)[counter] | SAVE_BIT); // Indiciate existing information
+            ((int*)buffer)[counter]++;
             previouslySaved = true;
 
         } else {
@@ -79,42 +73,41 @@ unsigned char* encode(unsigned char* pixels, unsigned char* previousFrame, unsig
                 previouslySaved = false;
             }
 
-            encoded[counter * sizeof(int) + CHANNELS] = 0;
+            buffer[counter * sizeof(int) + CHANNELS] = 0;
             for (int i = 0; i < CHANNELS; i++) {
-                encoded[counter * sizeof(int) + CHANNELS - i - 1] = pixel[i];
+                buffer[counter * sizeof(int) + CHANNELS - i - 1] = pixel[i];
             }
 
             counter++;
         }
     }
 
-    return encoded;
+    return counter;
 }
 
-unsigned char* decode(unsigned char* pixels, unsigned char* previousFrame, unsigned short height, unsigned short width) {
-    unsigned char* decoded = new unsigned char[height * width * CHANNELS];
-    unsigned int i = 0, currPixel = 0, currBlock = 0;
+unsigned int decode(unsigned char* buffer, unsigned char* pixels, unsigned char* previousFrame, unsigned short height, unsigned short width) {
+    unsigned int counter = 0, currPixel = 0, currBlock = 0;
     unsigned int amountOfPixels = height * width * CHANNELS;
 
     while (currPixel < amountOfPixels) {
-        currBlock = ((unsigned int*)pixels)[i];
+        currBlock = ((unsigned int*)pixels)[counter];
         
         // The following bits have been saved from the previous frame.
         if ((currBlock & SAVE_BIT) != 0) {
             currBlock = (currBlock & MAX_SAVED);
 
             for (unsigned int j = 0; j < currBlock * CHANNELS; j++) {
-                decoded[currPixel] = previousFrame[currPixel];
+                buffer[currPixel] = previousFrame[currPixel];
                 currPixel++;
             }
         } else {
             for (int bit = CHANNELS - 1; bit >= 0; bit--) {
-                decoded[currPixel++] = ((currBlock >> (BYTE_SIZE * bit)) & BYTE);
+                buffer[currPixel++] = ((currBlock >> (BYTE_SIZE * bit)) & BYTE);
             }
         }
 
-        i++;
+        counter++;
     }
 
-    return decoded;
+    return counter;
 }
