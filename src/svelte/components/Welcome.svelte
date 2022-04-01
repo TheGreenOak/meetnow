@@ -1,4 +1,7 @@
 <script lang="ts">
+import { select_option } from "svelte/internal";
+
+	import { slide } from "svelte/transition";
     import type { Networking } from "../../electron/backend";
     import { meeting } from "../stores";
 
@@ -20,15 +23,50 @@
         
 		net.join(id, password);
 	}
+
+	function makeJoinWork() {
+		hideJoinFirst();
+		showJoin();
+	}
+
+	let joinUsed = false;
+	function hideJoinFirst() {
+		joinUsed = true;
+	}
+
+	function delay(ms: number) {
+    	return new Promise( resolve => setTimeout(resolve, ms) );
+	}
+
+	let finished = false;
+	function showJoin() {
+		if(joinUsed) {
+			delay(1000).then(() => {
+				finished = true;
+			});
+		}
+	}
 </script>
 
 <div id="container">
     <button id="start-btn" class="btn" on:click={startMeeting}><span>Start Meeting</span></button>
-    
     <form id="meeting-form" on:submit|preventDefault={joinMeeting}>
+		{#if !joinUsed}
+			<button id="join-btn-first" class="btn {joinUsed}" on:click|preventDefault={makeJoinWork} out:slide>
+				<span>Join Meeting</span>
+			</button>
+		{/if}
+		{#if finished}
+			<div id="no-form-join-button" class="invisible">
+				<div class="invisible form-length"></div>
+				<div class="invisible form-length"></div>
+				<button id="join-btn-second" class="btn form-length" value="Join"><span>Join</span></button>
+			</div>
+		{/if}
+
         <input type="text"     class="details form-length" name="meeting-id"       placeholder="ID"       bind:value={id} />
         <input type="password" class="details form-length" name="meeting-password" placeholder="Password" bind:value={password} />
-		<input type="submit"  id="join-btn" class="btn form-length" value="Join">
+		<input type="submit"   class="btn     form-length" id="join-btn-third"		   value="Join">
 	</form>
 </div>
 
@@ -41,21 +79,47 @@
         margin-top: 24vh;
 		width: 40vw;
     }
+
+	.invisible {
+		pointer-events: none;
+	}
+	
+	#no-form-join-button {
+		position: absolute;
+		display: flex;
+		flex-direction: row;
+		gap: 0.5vw;
+		justify-content: center;
+		white-space: nowrap;
+	}
 	
     #start-btn {
 		user-select: none;
 		width: 40vw;
-    }
+	}
 
 	#start-btn:active {
 		transform: scale(0.9);
+	}
+
+	#join-btn-first {
+		position: absolute;
+		width: 40vw;
+		height: 36px;
+	}
+
+	#join-btn-second {
+		pointer-events: all;
 	}
 
 	.form-length {
 		width: 13vw;
 	}
 
-	#join-btn:active {
+	#join-btn-third {
+	}
+
+	#join-btn-third:active {
 		transform: scale(0.9);
 	}
 
