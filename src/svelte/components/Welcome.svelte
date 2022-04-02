@@ -24,49 +24,34 @@ import { select_option } from "svelte/internal";
 		net.join(id, password);
 	}
 
-	function makeJoinWork() {
-		hideJoinFirst();
-		showJoin();
-	}
-
 	let joinUsed = false;
 	function hideJoinFirst() {
 		joinUsed = true;
 	}
 
-	function delay(ms: number) {
-    	return new Promise( resolve => setTimeout(resolve, ms) );
-	}
 
-	let finished = false;
-	function showJoin() {
-		if(joinUsed) {
-			delay(1000).then(() => {
-				finished = true;
-			});
-		}
-	}
 </script>
 
 <div id="container">
     <button id="start-btn" class="btn" on:click={startMeeting}><span>Start Meeting</span></button>
     <form id="meeting-form" on:submit|preventDefault={joinMeeting}>
 		{#if !joinUsed}
-			<button id="join-btn-first" class="btn {joinUsed}" on:click|preventDefault={makeJoinWork} out:slide>
+			<button id="join-btn-first" class="btn {joinUsed}" on:click|preventDefault={hideJoinFirst} out:slide>
 				<span>Join Meeting</span>
 			</button>
 		{/if}
-		{#if finished}
-			<div id="no-form-join-button" class="invisible">
-				<div class="invisible form-length"></div>
-				<div class="invisible form-length"></div>
-				<button id="join-btn-second" class="btn form-length" value="Join"><span>Join</span></button>
-			</div>
-		{/if}
 
-        <input type="text"     class="details form-length" name="meeting-id"       placeholder="ID"       bind:value={id} />
-        <input type="password" class="details form-length" name="meeting-password" placeholder="Password" bind:value={password} />
-		<input type="submit"   class="btn     form-length" id="join-btn-third"		   value="Join">
+		<div id="no-form-join-button" class="invisible">
+			<div class="invisible form-length"></div>
+			<div class="invisible form-length"></div>
+			<button id="join-btn-second" class="btn form-length" value="Join"><span>Join</span></button>
+		</div>
+
+		{#if joinUsed}
+			<input type="text"     class="details form-length" name="meeting-id"       placeholder="ID"       bind:value={id} />
+			<input type="password" class="details form-length" name="meeting-password" placeholder="Password" bind:value={password} />
+			<input type="submit"   class="btn     form-length" id="join-btn-third"		   value="Join">
+		{/if}
 	</form>
 </div>
 
@@ -96,6 +81,7 @@ import { select_option } from "svelte/internal";
     #start-btn {
 		user-select: none;
 		width: 40vw;
+		height: 36px;
 	}
 
 	#start-btn:active {
@@ -106,6 +92,7 @@ import { select_option } from "svelte/internal";
 		position: absolute;
 		width: 40vw;
 		height: 36px;
+		z-index: 10;
 	}
 
 	#join-btn-second {
@@ -114,9 +101,6 @@ import { select_option } from "svelte/internal";
 
 	.form-length {
 		width: 13vw;
-	}
-
-	#join-btn-third {
 	}
 
 	#join-btn-third:active {
