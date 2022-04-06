@@ -1,7 +1,5 @@
 <script lang="ts">
-import { select_option } from "svelte/internal";
-
-	import { slide } from "svelte/transition";
+	import { horizontalSlide } from "../slide-transition";
     import type { Networking } from "../../electron/backend";
     import { meeting } from "../stores";
 
@@ -36,7 +34,7 @@ import { select_option } from "svelte/internal";
     <button id="start-btn" class="btn" on:click={startMeeting}><span>Start Meeting</span></button>
     <form id="meeting-form" on:submit|preventDefault={joinMeeting}>
 		{#if !joinUsed}
-			<button id="join-btn-first" class="btn {joinUsed}" on:click|preventDefault={hideJoinFirst} out:slide>
+			<button id="join-btn-first" class="btn {joinUsed}" on:click|preventDefault={hideJoinFirst} out:horizontalSlide>
 				<span>Join Meeting</span>
 			</button>
 		{/if}
