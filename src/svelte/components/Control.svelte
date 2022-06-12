@@ -148,18 +148,18 @@
 
     <div class="main-control item">
         {#if host}
-            <button class="switch" on:click={switchHost}>
-                <img src="assets/switch.png" style="padding:8px 8px;" alt="Switch Host" width="56" />
+            <button class="switch" on:click={switchHost} title="Switch Host">
+                <img src="assets/switch.png"  style="padding:8px 8px;" alt="Switch Host" width="56" />
             </button>
         {/if}
 
-        <button class="leave-control" on:click={leaveMeeting}>
-            <img src="assets/leave.png" style="padding:15px 16px;" alt="Leave Meeting" width="45" />
+        <button class="leave-control" on:click={leaveMeeting} title="Leave Meeting">
+            <img src="assets/leave.png"   style="padding:15px 16px;" alt="Leave Meeting" width="45" />
         </button>
 
         {#if host}
-            <button class="leave-control" on:click={endMeeting}>
-                <img src="assets/cross.png" style="padding:15px 16px;" alt="End Meeting" width="40" />
+            <button class="leave-control" on:click={endMeeting} title="End Meeting">
+                <img src="assets/cross.png"  style="padding:15px 16px;" alt="End Meeting" width="40" />
             </button>
         {/if}
     </div>
