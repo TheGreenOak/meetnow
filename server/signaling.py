@@ -84,7 +84,7 @@ class Signaling(TCPServer):
         participants: [(ip, port), (ip, port)]
     }
 
-    [self.users]
+    [self.users] - saves users in the form of:
     (ip, port): {
         socket: socket object,
         ttl: int,
@@ -92,7 +92,7 @@ class Signaling(TCPServer):
         host: bool [optional]
     }
 
-    [self.public_id]
+    [self.public_db] - saves meetings in the public database for the ice server in the form of:
     "id": {
         password: str,
         participants: [ip, ip]
