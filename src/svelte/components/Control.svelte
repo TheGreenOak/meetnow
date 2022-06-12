@@ -63,6 +63,10 @@
 		}
 	}
 
+    function switchHost() {
+        net.switch();
+    }
+
     function leaveMeeting() {
         net.leave();
     }
@@ -130,26 +134,32 @@
         <h2>{statusMessage}</h2>
     </div>
 
-    <div id="main-control" class="item">
+    <div class="main-control item">
         <button class="{webcamOn ? "on" : "off"}" style="padding:15px 18px;" on:click={toggleWebcam}>
-            <img src="assets/cam_{webcamOn ? "on" : "off"}.png" alt="Camera Icon" width = "50" />
+            <img src="assets/cam_{webcamOn ? "on" : "off"}.png" alt="Camera Icon" width="50" />
         </button>
         <button class="{micOn ? "on" : "off"}" style="padding:18px 19.5px;" on:click={toggleMicrophone}>
-            <img src="assets/mic_{micOn ? "on" : "off"}.png" alt="Microphone Icon" width = "45" />
+            <img src="assets/mic_{micOn ? "on" : "off"}.png" alt="Microphone Icon" width="45" />
         </button>
         <button class="send {!ready ? "disabled" : ""}" disabled="{!ready}" style="padding: 18px 21px;" on:click={sendFrame}>
             <img src="assets/upload.png" alt="Send Frame" width="43" />
         </button>
     </div>
 
-    <div class="item">
+    <div class="main-control item">
+        {#if host}
+            <button class="switch" on:click={switchHost}>
+                <img src="assets/switch.png" style="padding:8px 8px;" alt="Switch Host" width="56" />
+            </button>
+        {/if}
+
         <button class="leave-control" on:click={leaveMeeting}>
-            Leave Meeting
+            <img src="assets/leave.png" style="padding:15px 16px;" alt="Leave Meeting" width="45" />
         </button>
 
         {#if host}
             <button class="leave-control" on:click={endMeeting}>
-                End Meeting
+                <img src="assets/cross.png" style="padding:15px 16px;" alt="End Meeting" width="40" />
             </button>
         {/if}
     </div>
@@ -161,7 +171,7 @@
         flex-direction: row;
     }
 
-    #main-control {
+    .main-control {
         display: flex;
         flex-direction: row;
         justify-content: center;
@@ -189,7 +199,7 @@
 	
 	/*call control related styles*/
 
-	#main-control button {
+	.item button {
 		height: 70px;
 		width: 70px;
         border-color: white;
@@ -199,59 +209,54 @@
 		transition: background-color ease 0.5s;
 	}
 
-    #main-control button img {
+    .item button img {
 		position: relative;
 		right: 10.5px;
 		top: -10px;
     }
 
-	#main-control button.on {
+	.item button.on {
 		background-color:rgb(77, 77, 77);
 	}
 
-	#main-control button.on:hover {
+	.item button.on:hover {
 		background-color: rgb(59, 58, 58);
 	}
 
-	#main-control button.off {
+	.item button.off {
 		background-color: rgb(234, 67, 53);
 	}
 	
-	#main-control button.off:hover {
+	.item button.off:hover {
 		background-color: rgb(224,80,67);
 	}
 
-    #main-control button.send {
+    .item button.send {
         background-color: #076fc6;
     }
 
-    #main-control button.send:hover {
+    .item button.send:hover {
         background-color: #248add;
     }
 
-    #main-control button.send.disabled {
+    .item button.send.disabled {
         cursor: not-allowed;
         background-color: rgb(77, 77, 77);
     }
 
     .leave-control {
-        color: white;
-        font-weight: bold;
-        font-size: 20px;
-
         background-color: rgb(234, 67, 53);
-        transition: background-color ease 0.5s;
-
-        border-radius: 20px;
-        height: 50px;
-        width: 160px;
-        padding: 3px;
-
-        cursor: pointer;
-        user-select: none;
     }
 
     .leave-control:hover {
         background-color: rgb(231, 95, 82);
+    }
+
+    .switch {
+        background-color: rgb(219, 143, 0);
+    }
+
+    .switch:hover {
+        background-color: rgb(250, 150, 1);
     }
 </style>
