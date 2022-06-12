@@ -1,6 +1,6 @@
 <script lang="ts">
     import { createEventDispatcher } from "svelte";
-    import { meeting } from "../stores";
+    import { meeting, notifications } from "../stores";
 
     import type { Networking } from "../../electron/backend";
     import type Media from "../media";
@@ -16,6 +16,8 @@
     let host = false;
     let statusMessage = "Waiting for peer...";
 
+    let ready = false;
+
     meeting.subscribe(info => {
         if (info?.host) host = info.host;
         
@@ -25,10 +27,12 @@
 
         else if (info?.disconnected) {
             statusMessage = "Waiting for peer...";
+            ready = false;
         }
 
         else if (info?.ready) {
             statusMessage = "Connected";
+            ready = true;
         }
     });
 
@@ -66,6 +70,59 @@
     function endMeeting() {
         net.end();
     }
+
+    function sendFrame() {
+        if (ready) {
+            if (webcamOn) {
+                notifications.set({
+                    type: "info",
+                    data: "Sending current frame..."
+                });
+
+                userMedia.getVideoFrame().then(async (frame) => {
+                    let j = 0;
+                    for (let i = 0; i < frame.length; i += 512) {
+                        if (i + 512 >= frame.length) {
+                            net.send("V" + toShortBytes(j) + frame.substring(i));
+                        } else {
+                            net.send("V" + toShortBytes(j) + frame.substring(i, i + 512));
+                        }
+    
+                        await new Promise(r => setTimeout(r, 1));
+                        j++;
+                    }
+    
+                    console.log("ENDED!");
+                    console.log("Num of transitions: " + (j + 1));
+                    net.send("VEND");
+
+                    notifications.set({
+                        type: "success",
+                        data: "Transmission completed!"
+                    });
+                })
+    
+                .catch(err => console.error(err));
+            } else {
+                notifications.set({
+                    type: "error",
+                    data: "Your webcam isn't on"
+                });
+            }
+        } else {
+            notifications.set({
+                type: "error",
+                data: "You're not connected to anyone yet"
+            });
+        }
+	}
+
+	function toShortBytes(value: number): string {
+		let highBytes = (value & 65280) >> 4; // 65280 == one byte ON,  one byte OFF
+		let lowBytes = (value & 255);	      // 255   == one byte OFF, one byte ON
+
+		return String.fromCharCode(highBytes) + String.fromCharCode(lowBytes);
+	}
 </script>
 
 <div id="container">
@@ -74,11 +131,14 @@
     </div>
 
     <div id="main-control" class="item">
-        <button class="{webcamOn ? "on" : "off"}" on:click={toggleWebcam}>
-            <img src="assets/cam_{webcamOn ? "on" : "off"}.png" alt="Camera Icon" width = "76" />
+        <button class="{webcamOn ? "on" : "off"}" style="padding:15px 18px;" on:click={toggleWebcam}>
+            <img src="assets/cam_{webcamOn ? "on" : "off"}.png" alt="Camera Icon" width = "50" />
         </button>
-        <button class="{micOn ? "on" : "off"}" on:click={toggleMicrophone}>
-            <img src="assets/mic_{micOn ? "on" : "off"}.png" alt="Microphone Icon" width = "76" />
+        <button class="{micOn ? "on" : "off"}" style="padding:18px 19.5px;" on:click={toggleMicrophone}>
+            <img src="assets/mic_{micOn ? "on" : "off"}.png" alt="Microphone Icon" width = "45" />
+        </button>
+        <button class="send {!ready ? "disabled" : ""}" disabled="{!ready}" style="padding: 18px 21px;" on:click={sendFrame}>
+            <img src="assets/upload.png" alt="Send Frame" width="43" />
         </button>
     </div>
 
@@ -132,6 +192,8 @@
 	#main-control button {
 		height: 70px;
 		width: 70px;
+        border-color: white;
+        border-width: 3px;
 		border-radius: 50%;
 		cursor: pointer;
 		transition: background-color ease 0.5s;
@@ -158,6 +220,19 @@
 	#main-control button.off:hover {
 		background-color: rgb(224,80,67);
 	}
+
+    #main-control button.send {
+        background-color: #076fc6;
+    }
+
+    #main-control button.send:hover {
+        background-color: #248add;
+    }
+
+    #main-control button.send.disabled {
+        cursor: not-allowed;
+        background-color: rgb(77, 77, 77);
+    }
 
     .leave-control {
         color: white;
