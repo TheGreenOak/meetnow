@@ -1,6 +1,7 @@
 import { Socket as UDPSocket, createSocket as createUDPSocket } from "dgram";
 import { Socket as TCPSocket } from "net";
 import { EventEmitter } from "events";
+import { address as getLocalAddress } from "ip";
 
 const DEFAULT_IP = "meetnow.yeho.dev";
 const STARTING_PORT = 34200;
@@ -179,16 +180,7 @@ export class Networking extends EventEmitter {
     private async establishConnection() {
         // Step 1. Get IP address
         if (this.state.localAddress == undefined) {
-            this.getIP().then((ip) => {
-                this.state.localAddress = { ip: ip, port: -1 };
-            })
-
-            .catch(() => {
-                this.state.remoteAddress = {
-                    ip: DEFAULT_IP,
-                    port: PORTS.TURN
-                };
-            });
+            this.state.localAddress = { ip: getLocalAddress(), port: -1 };
         }
 
         // Step 2. Negotitate connection via ICE
@@ -274,7 +266,7 @@ export class Networking extends EventEmitter {
      *
      * @returns An IP address promise, which resolves to an IP address string
      */
-    private getIP(): Promise<string> {
+    private getPublicAddress(): Promise<string> {
         return new Promise<string>((resolve, reject) => {
             let stunSocket: UDPSocket = createUDPSocket("udp4");
             stunSocket.connect(PORTS.STUN, DEFAULT_IP);
